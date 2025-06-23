@@ -49,7 +49,9 @@ class TestGenericRepository:
 
         # Test initialization with optional parameters
         custom_logger = logging.getLogger('test')
-        repo = GenericRepository(table=mock_table, primary_key_name='pk', logger=custom_logger, data_expiration_days=7, debug_mode=True)
+        repo = GenericRepository(
+            table=mock_table, primary_key_name='pk', logger=custom_logger, data_expiration_days=7, debug_mode=True
+        )
         assert repo.primary_key_name == 'pk'
         assert repo.logger == custom_logger
         assert repo.data_expiration_days == 7
@@ -64,7 +66,15 @@ class TestGenericRepository:
 
     def test_serialize_for_dynamodb(self, repository):
         """Test data serialization for DynamoDB compatibility."""
-        test_data = {'string': 'test', 'integer': 42, 'float': 3.14, 'boolean': True, 'none': None, 'list': [1, 2, 3], 'dict': {'nested': 'value'}}
+        test_data = {
+            'string': 'test',
+            'integer': 42,
+            'float': 3.14,
+            'boolean': True,
+            'none': None,
+            'list': [1, 2, 3],
+            'dict': {'nested': 'value'},
+        }
 
         result = repository._serialize_for_dynamodb(test_data)
 
@@ -101,7 +111,9 @@ class TestGenericRepository:
 
     def test_load_client_error(self, repository, mock_table):
         """Test loading when DynamoDB raises an error."""
-        mock_table.get_item.side_effect = ClientError({'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, 'GetItem')
+        mock_table.get_item.side_effect = ClientError(
+            {'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, 'GetItem'
+        )
 
         with pytest.raises(ClientError):
             repository.load('test-id')
@@ -290,5 +302,6 @@ def sample_dynamodb_item():
 def mock_client_error():
     """Create a mock ClientError for testing error scenarios."""
     return ClientError(
-        error_response={'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Requested resource not found'}}, operation_name='GetItem'
+        error_response={'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Requested resource not found'}},
+        operation_name='GetItem',
     )

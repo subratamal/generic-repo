@@ -166,7 +166,10 @@ def composite_key_operations():
                     'KeyType': 'RANGE',  # Sort key
                 },
             ],
-            AttributeDefinitions=[{'AttributeName': 'tenant_id', 'AttributeType': 'S'}, {'AttributeName': 'user_id', 'AttributeType': 'S'}],
+            AttributeDefinitions=[
+                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
+                {'AttributeName': 'user_id', 'AttributeType': 'S'},
+            ],
             BillingMode='PAY_PER_REQUEST',
         )
 
@@ -184,7 +187,13 @@ def composite_key_operations():
     )
 
     # Save with composite key
-    user_data = {'tenant_id': 'company-a', 'user_id': 'emp-123', 'name': 'David Brown', 'role': 'Manager', 'salary': Decimal('75000.00')}
+    user_data = {
+        'tenant_id': 'company-a',
+        'user_id': 'emp-123',
+        'name': 'David Brown',
+        'role': 'Manager',
+        'salary': Decimal('75000.00'),
+    }
 
     logger.info('Saving with composite key...')
     repo.save_with_composite_key(user_data)
