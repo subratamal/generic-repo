@@ -1,0 +1,100 @@
+[project]
+name = "generic-repo"
+version = "1.0.0"
+description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern"
+readme = "README.md"
+requires-python = ">=3.9,<=3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "Subrat", email = "06.subrat@gmail.com" }]
+maintainers = [{ name = "Subrat", email = "06.subrat@gmail.com" }]
+keywords = [
+    "dynamodb",
+    "aws",
+    "repository",
+    "database",
+    "nosql",
+    "boto3",
+    "orm",
+    "data-access",
+    "crud",
+    "batch-operations"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = ["boto3~=1.38.29", "botocore~=1.38.29"]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.11.5",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "mypy>=1.0.0",
+    "bandit>=1.7.0",
+    "types-boto3>=1.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "moto>=4.2.0",  # For mocking AWS services
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=0.18.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/subratamal/generic-repo"
+Repository = "https://github.com/subratamal/generic-repo.git"
+Documentation = "https://github.com/subratamal/generic-repo/wiki"
+Changelog = "https://github.com/subratamal/generic-repo/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/subratamal/generic-repo/issues"
+
+[build-system]
+requires = ["setuptools>=60", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+# Enable linters
+lint.select = ["E", "F", "I", "W"]
+lint.ignore = ["E501"]
+
+# Configure isort rules
+lint.isort.known-first-party = ["generic_repo"]
+
+# Configure formatter
+format.quote-style = "single"
+format.indent-style = "space"
+format.line-ending = "auto"
+format.skip-magic-trailing-comma = false
+
+# Exclude directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+]

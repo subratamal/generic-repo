@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+recursive-include generic_repo *.py
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+exclude .gitignore .ruff_cache
+prune .git
+prune .github
+prune tests
+prune docs 
