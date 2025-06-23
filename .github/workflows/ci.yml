@@ -102,15 +102,34 @@ jobs:
         name: dist
         path: dist/
 
-  publish:
+  test-publish:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'
     environment:
+      name: test-pypi
+      url: https://test.pypi.org/p/generic-repo
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist
+        path: dist/
+    
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build, test-publish]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    environment:
       name: pypi
       url: https://pypi.org/p/generic-repo
-    permissions:
-      id-token: write
     
     steps:
     - name: Download build artifacts
@@ -122,4 +141,4 @@ jobs:
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        repository-url: https://upload.pypi.org/legacy/ 
+        password: ${{ secrets.PYPI_API_TOKEN }} 
