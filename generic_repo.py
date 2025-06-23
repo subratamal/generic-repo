@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError

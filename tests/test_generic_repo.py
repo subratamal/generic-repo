@@ -5,10 +5,9 @@ This module contains comprehensive tests for the GenericRepository class,
 including unit tests with mocked DynamoDB operations.
 """
 
-import json
 import logging
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import ClientError
