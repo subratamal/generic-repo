@@ -201,12 +201,71 @@ def sync_example():
         items = repo.find_all('user-123')
         print(f'Found {len(items)} items')
 
+        # Find all items with filtering
+        filtered_items = repo.find_all('user-123', filters={'age': {'gt': 25}})
+        print(f'Found {len(filtered_items)} items for user-123 with age > 25')
+
         # Count total items
         count = repo.count()
         print(f'Total items in table: {count}')
 
     except Exception as e:
         print(f'Error in sync operations: {e}')
+
+
+def sync_filtering_example():
+    """Example demonstrating filtering functionality in sync GenericRepository."""
+    print('\n=== Sync Filtering Example ===')
+
+    repo = GenericRepository(
+        table_name='my-table',
+        primary_key_name='id',
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    )
+
+    try:
+        # First, add some sample data with different attributes for filtering
+        sample_data = [
+            {'id': 'sync-filter-001', 'name': 'John Doe', 'age': 25, 'status': 'active', 'city': 'New York', 'score': 85.5},
+            {'id': 'sync-filter-002', 'name': 'Jane Smith', 'age': 30, 'status': 'inactive', 'city': 'Los Angeles', 'score': 92.0},
+            {'id': 'sync-filter-003', 'name': 'Bob Johnson', 'age': 35, 'status': 'active', 'city': 'Chicago', 'score': 78.3},
+            {'id': 'sync-filter-004', 'name': 'Alice Brown', 'age': 28, 'status': 'active', 'city': 'Houston', 'score': 88.7},
+        ]
+
+        print('Adding sample data for sync filtering...')
+        repo.save_batch(sample_data)
+
+        # Example 1: Simple equality filter
+        print('\n1. Simple equality filter (status = "active"):')
+        count = 0
+        for item in repo.load_all(filters={'status': 'active'}):
+            if 'sync-filter-' in item.get('id', ''):  # Only show our test data
+                count += 1
+                print(f'   {item["name"]} (age: {item["age"]}, score: {item["score"]})')
+        print(f'   Found {count} active users')
+
+        # Example 2: Multiple conditions
+        print('\n2. Active users older than 25:')
+        count = 0
+        for item in repo.load_all(filters={'status': 'active', 'age': {'gt': 25}}):
+            if 'sync-filter-' in item.get('id', ''):
+                count += 1
+                print(f'   {item["name"]} (age: {item["age"]})')
+        print(f'   Found {count} active users older than 25')
+
+        # Example 3: String operations
+        print('\n3. Names containing "Jo":')
+        count = 0
+        for item in repo.load_all(filters={'name': {'contains': 'Jo'}}):
+            if 'sync-filter-' in item.get('id', ''):
+                count += 1
+                print(f'   {item["name"]}')
+        print(f'   Found {count} users with "Jo" in name')
+
+    except Exception as e:
+        print(f'Error in sync filtering operations: {e}')
 
 
 async def async_example():
@@ -249,6 +308,10 @@ async def async_example():
             items = await repo.find_all('user-async-123')
             print(f'Async found {len(items)} items')
 
+            # Find all items with filtering
+            filtered_items = await repo.find_all('user-async-123', filters={'age': {'gt': 25}})
+            print(f'Async found {len(filtered_items)} items for user-async-123 with age > 25')
+
             # Load all items using async generator
             print('Loading all items asynchronously:')
             count = 0
@@ -266,6 +329,116 @@ async def async_example():
 
         except Exception as e:
             print(f'Error in async operations: {e}')
+
+
+async def filtering_example():
+    """Example demonstrating the new filtering functionality in load_all."""
+    print('\n=== Filtering Example ===')
+
+    async with AsyncGenericRepository(
+        table_name='my-table',
+        primary_key_name='id',
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    ) as repo:
+        try:
+            # First, add some sample data with different attributes for filtering
+            sample_data = [
+                {'id': 'user-filter-001', 'name': 'John Doe', 'age': 25, 'status': 'active', 'city': 'New York', 'score': 85.5},
+                {'id': 'user-filter-002', 'name': 'Jane Smith', 'age': 30, 'status': 'inactive', 'city': 'Los Angeles', 'score': 92.0},
+                {'id': 'user-filter-003', 'name': 'Bob Johnson', 'age': 35, 'status': 'active', 'city': 'Chicago', 'score': 78.3},
+                {'id': 'user-filter-004', 'name': 'Alice Brown', 'age': 28, 'status': 'active', 'city': 'Houston', 'score': 88.7},
+                {'id': 'user-filter-005', 'name': 'Charlie Wilson', 'age': 45, 'status': 'inactive', 'city': 'Phoenix', 'score': 95.2},
+            ]
+
+            print('Adding sample data for filtering...')
+            await repo.save_batch(sample_data)
+
+            # Example 1: Simple equality filter
+            print('\n1. Simple equality filter (status = "active"):')
+            count = 0
+            async for item in repo.load_all(filters={'status': 'active'}):
+                if 'user-filter-' in item.get('id', ''):  # Only show our test data
+                    count += 1
+                    print(f'   {item["name"]} (age: {item["age"]}, score: {item["score"]})')
+            print(f'   Found {count} active users')
+
+            # Example 2: Comparison operators
+            print('\n2. Age greater than 30:')
+            count = 0
+            async for item in repo.load_all(filters={'age': {'gt': 30}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} (age: {item["age"]})')
+            print(f'   Found {count} users older than 30')
+
+            # Example 3: Multiple conditions (AND logic)
+            print('\n3. Active users older than 25:')
+            count = 0
+            async for item in repo.load_all(filters={'status': 'active', 'age': {'gt': 25}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} (age: {item["age"]})')
+            print(f'   Found {count} active users older than 25')
+
+            # Example 4: Between operator
+            print('\n4. Users with age between 28 and 35:')
+            count = 0
+            async for item in repo.load_all(filters={'age': {'between': [28, 35]}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} (age: {item["age"]})')
+            print(f'   Found {count} users between age 28-35')
+
+            # Example 5: String contains
+            print('\n5. Names containing "Jo":')
+            count = 0
+            async for item in repo.load_all(filters={'name': {'contains': 'Jo'}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]}')
+            print(f'   Found {count} users with "Jo" in name')
+
+            # Example 6: String begins with
+            print('\n6. Names beginning with "A":')
+            count = 0
+            async for item in repo.load_all(filters={'name': {'begins_with': 'A'}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]}')
+            print(f'   Found {count} users whose name starts with "A"')
+
+            # Example 7: In operator
+            print('\n7. Users from New York or Chicago:')
+            count = 0
+            async for item in repo.load_all(filters={'city': {'in': ['New York', 'Chicago']}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} from {item["city"]}')
+            print(f'   Found {count} users from specified cities')
+
+            # Example 8: Explicit type specification for decimal numbers
+            print('\n8. Users with score >= 90.0 (explicit number type):')
+            count = 0
+            async for item in repo.load_all(filters={'score': {'value': 90.0, 'type': 'N', 'operator': 'ge'}}):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} (score: {item["score"]})')
+            print(f'   Found {count} users with score >= 90.0')
+
+            # Example 9: Complex filter combining multiple operators
+            print('\n9. Complex filter - Active users with score > 80 and age <= 35:')
+            count = 0
+            filters = {'status': 'active', 'score': {'gt': 80}, 'age': {'le': 35}}
+            async for item in repo.load_all(filters=filters):
+                if 'user-filter-' in item.get('id', ''):
+                    count += 1
+                    print(f'   {item["name"]} (age: {item["age"]}, score: {item["score"]})')
+            print(f'   Found {count} users matching complex criteria')
+
+        except Exception as e:
+            print(f'Error in filtering operations: {e}')
 
 
 def composite_key_example():
@@ -347,6 +520,18 @@ def index_query_example():
         active_items = repo.find_all_with_index(index_name='status-index', key_name='status', key_value='active')
         print(f'Found {len(active_items)} active users')
 
+        # Find active users with additional filtering
+        filtered_active_items = repo.find_all_with_index(
+            index_name='status-index', key_name='status', key_value='active', filters={'name': {'contains': 'Jo'}}
+        )
+        print(f'Found {len(filtered_active_items)} active users with "Jo" in name')
+
+        # Find one with filtering
+        filtered_item = repo.find_one_with_index(
+            index_name='status-index', key_name='status', key_value='active', filters={'name': {'begins_with': 'B'}}
+        )
+        print(f'First active user with name starting with "B": {filtered_item.get("name", "None") if filtered_item else "None"}')
+
     except Exception as e:
         print(f'Error in index query operations: {e}')
 
@@ -356,11 +541,13 @@ if __name__ == '__main__':
     setup_tables()
 
     # Run synchronous examples
-    # sync_example()
-    # composite_key_example()
-    # index_query_example()
+    sync_example()
+    sync_filtering_example()
+    composite_key_example()
+    index_query_example()
 
     # Run asynchronous example
     asyncio.run(async_example())
+    asyncio.run(filtering_example())
 
     print('\n=== All Examples Completed ===')
