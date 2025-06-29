@@ -5,7 +5,6 @@ This module provides filtering functionality that can be shared between
 sync and async repository implementations.
 """
 
-import json
 from decimal import Decimal
 from typing import Any, Dict, Optional
 

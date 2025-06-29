@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import aioboto3
 from boto3.dynamodb.conditions import Key
@@ -432,7 +432,10 @@ class AsyncGenericRepository:
             return []
 
         try:
-            query_params = {'TableName': self.table_name, 'KeyConditionExpression': Key(self.primary_key_name).eq(primary_key_value)}
+            query_params = {
+                'TableName': self.table_name,
+                'KeyConditionExpression': Key(self.primary_key_name).eq(primary_key_value),
+            }
 
             # Build filter expression if filters are provided
             if filters:
@@ -568,7 +571,11 @@ class AsyncGenericRepository:
             ValueError: If filter format is invalid
         """
         try:
-            query_params = {'TableName': self.table_name, 'IndexName': index_name, 'KeyConditionExpression': Key(key_name).eq(key_value)}
+            query_params = {
+                'TableName': self.table_name,
+                'IndexName': index_name,
+                'KeyConditionExpression': Key(key_name).eq(key_value),
+            }
 
             # Build filter expression if filters are provided
             if filters:

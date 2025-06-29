@@ -176,7 +176,9 @@ class GenericRepository:
     # BASIC WRITE/DELETE OPERATIONS
     # ===========================
 
-    def save(self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = True) -> Optional[Dict[str, Any]]:
+    def save(
+        self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
         Save an item to the table.
 
@@ -215,7 +217,9 @@ class GenericRepository:
             self.logger.error(f'Error saving item: {e}')
             raise
 
-    def save_with_composite_key(self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = True) -> Optional[Dict[str, Any]]:
+    def save_with_composite_key(
+        self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
         Save an item to a table with composite key (partition + sort key).
 
@@ -406,7 +410,10 @@ class GenericRepository:
         try:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
-            query_params = {'TableName': table_name, 'KeyConditionExpression': Key(self.primary_key_name).eq(primary_key_value)}
+            query_params = {
+                'TableName': table_name,
+                'KeyConditionExpression': Key(self.primary_key_name).eq(primary_key_value),
+            }
 
             # Build filter expression if filters are provided
             if filters:
@@ -506,7 +513,9 @@ class GenericRepository:
         items = self.find_all_with_index(index_name, key_name, key_value, filters)
         return items[0] if items else None
 
-    def find_all_with_index(self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def find_all_with_index(
+        self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Find all items matching the index query, with optional filtering.
 
@@ -544,7 +553,11 @@ class GenericRepository:
         try:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
-            query_params = {'TableName': table_name, 'IndexName': index_name, 'KeyConditionExpression': Key(key_name).eq(key_value)}
+            query_params = {
+                'TableName': table_name,
+                'IndexName': index_name,
+                'KeyConditionExpression': Key(key_name).eq(key_value),
+            }
 
             # Build filter expression if filters are provided
             if filters:

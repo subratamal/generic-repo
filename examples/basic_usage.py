@@ -228,10 +228,38 @@ def sync_filtering_example():
     try:
         # First, add some sample data with different attributes for filtering
         sample_data = [
-            {'id': 'sync-filter-001', 'name': 'John Doe', 'age': 25, 'status': 'active', 'city': 'New York', 'score': 85.5},
-            {'id': 'sync-filter-002', 'name': 'Jane Smith', 'age': 30, 'status': 'inactive', 'city': 'Los Angeles', 'score': 92.0},
-            {'id': 'sync-filter-003', 'name': 'Bob Johnson', 'age': 35, 'status': 'active', 'city': 'Chicago', 'score': 78.3},
-            {'id': 'sync-filter-004', 'name': 'Alice Brown', 'age': 28, 'status': 'active', 'city': 'Houston', 'score': 88.7},
+            {
+                'id': 'sync-filter-001',
+                'name': 'John Doe',
+                'age': 25,
+                'status': 'active',
+                'city': 'New York',
+                'score': 85.5,
+            },
+            {
+                'id': 'sync-filter-002',
+                'name': 'Jane Smith',
+                'age': 30,
+                'status': 'inactive',
+                'city': 'Los Angeles',
+                'score': 92.0,
+            },
+            {
+                'id': 'sync-filter-003',
+                'name': 'Bob Johnson',
+                'age': 35,
+                'status': 'active',
+                'city': 'Chicago',
+                'score': 78.3,
+            },
+            {
+                'id': 'sync-filter-004',
+                'name': 'Alice Brown',
+                'age': 28,
+                'status': 'active',
+                'city': 'Houston',
+                'score': 88.7,
+            },
         ]
 
         print('Adding sample data for sync filtering...')
@@ -345,11 +373,46 @@ async def filtering_example():
         try:
             # First, add some sample data with different attributes for filtering
             sample_data = [
-                {'id': 'user-filter-001', 'name': 'John Doe', 'age': 25, 'status': 'active', 'city': 'New York', 'score': 85.5},
-                {'id': 'user-filter-002', 'name': 'Jane Smith', 'age': 30, 'status': 'inactive', 'city': 'Los Angeles', 'score': 92.0},
-                {'id': 'user-filter-003', 'name': 'Bob Johnson', 'age': 35, 'status': 'active', 'city': 'Chicago', 'score': 78.3},
-                {'id': 'user-filter-004', 'name': 'Alice Brown', 'age': 28, 'status': 'active', 'city': 'Houston', 'score': 88.7},
-                {'id': 'user-filter-005', 'name': 'Charlie Wilson', 'age': 45, 'status': 'inactive', 'city': 'Phoenix', 'score': 95.2},
+                {
+                    'id': 'user-filter-001',
+                    'name': 'John Doe',
+                    'age': 25,
+                    'status': 'active',
+                    'city': 'New York',
+                    'score': 85.5,
+                },
+                {
+                    'id': 'user-filter-002',
+                    'name': 'Jane Smith',
+                    'age': 30,
+                    'status': 'inactive',
+                    'city': 'Los Angeles',
+                    'score': 92.0,
+                },
+                {
+                    'id': 'user-filter-003',
+                    'name': 'Bob Johnson',
+                    'age': 35,
+                    'status': 'active',
+                    'city': 'Chicago',
+                    'score': 78.3,
+                },
+                {
+                    'id': 'user-filter-004',
+                    'name': 'Alice Brown',
+                    'age': 28,
+                    'status': 'active',
+                    'city': 'Houston',
+                    'score': 88.7,
+                },
+                {
+                    'id': 'user-filter-005',
+                    'name': 'Charlie Wilson',
+                    'age': 45,
+                    'status': 'inactive',
+                    'city': 'Phoenix',
+                    'score': 95.2,
+                },
             ]
 
             print('Adding sample data for filtering...')
@@ -530,7 +593,9 @@ def index_query_example():
         filtered_item = repo.find_one_with_index(
             index_name='status-index', key_name='status', key_value='active', filters={'name': {'begins_with': 'B'}}
         )
-        print(f'First active user with name starting with "B": {filtered_item.get("name", "None") if filtered_item else "None"}')
+        print(
+            f'First active user with name starting with "B": {filtered_item.get("name", "None") if filtered_item else "None"}'
+        )
 
     except Exception as e:
         print(f'Error in index query operations: {e}')

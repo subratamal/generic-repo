@@ -7,7 +7,7 @@ including unit tests with mocked DynamoDB operations.
 
 import logging
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -124,13 +124,17 @@ def mock_aioboto3_session(async_mock_table):
 @pytest.fixture
 def async_repo(mock_aioboto3_session):
     """Create an AsyncGenericRepository instance with mocked dependencies."""
-    return AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=False)
+    return AsyncGenericRepository(
+        table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=False
+    )
 
 
 @pytest_asyncio.fixture
 async def async_repo_context(mock_aioboto3_session):
     """Create an async context manager for AsyncGenericRepository."""
-    async with AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=False) as repo:
+    async with AsyncGenericRepository(
+        table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=False
+    ) as repo:
         yield repo
 
 
@@ -193,7 +197,7 @@ class TestGenericRepository:
         model_data = {'name': 'Test Item', 'value': 42}
         mock_table.get_item.return_value = {'Item': {'id': 'test', **model_data}}
 
-        result = sync_repo.save('test', model_data)
+        sync_repo.save('test', model_data)
 
         # Verify put_item was called
         mock_table.put_item.assert_called_once()
@@ -204,7 +208,9 @@ class TestGenericRepository:
 
     def test_save_debug_mode(self, mock_dynamodb_resource, mock_table):
         """Test saving in debug mode."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
 
         result = debug_repo.save('test', {'name': 'Test'})
 
@@ -214,7 +220,9 @@ class TestGenericRepository:
 
     def test_save_with_expiration(self, mock_dynamodb_resource, mock_table):
         """Test saving with expiration."""
-        repo_with_expiration = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30)
+        repo_with_expiration = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30
+        )
 
         repo_with_expiration.save('test', {'name': 'Test'}, return_model=False)
 
@@ -289,7 +297,7 @@ class TestGenericRepository:
         """Test saving with composite key."""
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
-        result = sync_repo.save_with_composite_key(item_data, return_model=False)
+        sync_repo.save_with_composite_key(item_data, return_model=False)
 
         mock_table.put_item.assert_called_once()
         call_args = mock_table.put_item.call_args[1]['Item']
@@ -299,7 +307,9 @@ class TestGenericRepository:
 
     def test_save_with_composite_key_with_expiration(self, mock_dynamodb_resource, mock_table):
         """Test saving with composite key and expiration."""
-        repo_with_expiration = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30)
+        repo_with_expiration = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30
+        )
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
         repo_with_expiration.save_with_composite_key(item_data, return_model=False)
@@ -318,7 +328,9 @@ class TestGenericRepository:
 
     def test_delete_by_composite_key_debug_mode(self, mock_dynamodb_resource, mock_table):
         """Test deleting by composite key in debug mode."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         key_dict = {'pk': 'partition1', 'sk': 'sort1'}
 
         debug_repo.delete_by_composite_key(key_dict)
@@ -348,7 +360,9 @@ class TestGenericRepository:
 
     def test_delete_batch_by_keys_debug_mode(self, mock_dynamodb_resource, mock_table):
         """Test batch deleting in debug mode."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         key_dicts = [{'id': 'item1'}, {'id': 'item2'}]
 
         debug_repo.delete_batch_by_keys(key_dicts)
@@ -357,7 +371,10 @@ class TestGenericRepository:
 
     def test_find_all(self, sync_repo, mock_table):
         """Test finding all items with primary key."""
-        expected_items = [{'id': 'test', 'sk': 'item1', 'name': 'Item 1'}, {'id': 'test', 'sk': 'item2', 'name': 'Item 2'}]
+        expected_items = [
+            {'id': 'test', 'sk': 'item1', 'name': 'Item 1'},
+            {'id': 'test', 'sk': 'item2', 'name': 'Item 2'},
+        ]
 
         mock_paginator = Mock()
         mock_table.meta.client.get_paginator.return_value = mock_paginator
@@ -426,7 +443,10 @@ class TestGenericRepository:
 
     def test_find_all_with_index(self, sync_repo, mock_table):
         """Test finding all items with index."""
-        expected_items = [{'id': 'user1', 'status': 'active', 'name': 'User 1'}, {'id': 'user2', 'status': 'active', 'name': 'User 2'}]
+        expected_items = [
+            {'id': 'user1', 'status': 'active', 'name': 'User 1'},
+            {'id': 'user2', 'status': 'active', 'name': 'User 2'},
+        ]
 
         mock_paginator = Mock()
         mock_table.meta.client.get_paginator.return_value = mock_paginator
@@ -511,7 +531,8 @@ class TestGenericRepository:
         mock_context_manager.__exit__ = Mock(return_value=None)
         mock_table.batch_writer.return_value = mock_context_manager
         mock_batch_writer.put_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='BatchWriteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='BatchWriteItem',
         )
 
         with pytest.raises(ClientError):
@@ -529,7 +550,8 @@ class TestGenericRepository:
     def test_count_client_error(self, sync_repo, mock_table):
         """Test count method with ClientError."""
         mock_table.meta.client.describe_table.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='DescribeTable'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='DescribeTable',
         )
 
         with pytest.raises(ClientError):
@@ -546,7 +568,9 @@ class TestGenericRepository:
             custom_session = Mock()
             custom_session.resource.return_value = mock_dynamodb
 
-            repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-west-2', session=custom_session)
+            repo = GenericRepository(
+                table_name='test-table', primary_key_name='id', region_name='us-west-2', session=custom_session
+            )
 
             # Verify custom session was used
             custom_session.resource.assert_called_once_with('dynamodb', region_name='us-west-2')
@@ -594,7 +618,8 @@ class TestGenericRepository:
     def test_delete_by_composite_key_client_error(self, sync_repo, mock_table):
         """Test delete_by_composite_key with ClientError."""
         mock_table.delete_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='DeleteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='DeleteItem',
         )
 
         with pytest.raises(ClientError):
@@ -610,7 +635,8 @@ class TestGenericRepository:
         mock_context_manager.__exit__ = Mock(return_value=None)
         mock_table.batch_writer.return_value = mock_context_manager
         mock_batch_writer.delete_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='BatchWriteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='BatchWriteItem',
         )
 
         with pytest.raises(ClientError):
@@ -652,7 +678,9 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, mock_aioboto3_session):
         """Test async context manager functionality."""
-        async with AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1') as repo:
+        async with AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1'
+        ) as repo:
             assert repo.table_name == 'test-table'
 
     @pytest.mark.asyncio
@@ -671,7 +699,7 @@ class TestAsyncGenericRepository:
         model_data = {'name': 'Test Item', 'value': 42}
         async_mock_table.get_item.return_value = {'Item': {'id': 'test', **model_data}}
 
-        result = await async_repo_context.save('test', model_data)
+        await async_repo_context.save('test', model_data)
 
         # Verify put_item was called
         async_mock_table.put_item.assert_called_once()
@@ -679,7 +707,9 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_save_debug_mode(self, mock_aioboto3_session, async_mock_table):
         """Test async saving in debug mode."""
-        repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
 
         result = await repo.save('test', {'name': 'Test'})
 
@@ -717,14 +747,16 @@ class TestAsyncGenericRepository:
         """Test async saving with composite key."""
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
-        result = await async_repo_context.save_with_composite_key(item_data, return_model=False)
+        await async_repo_context.save_with_composite_key(item_data, return_model=False)
 
         async_mock_table.put_item.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_save_with_composite_key_with_expiration(self, mock_aioboto3_session):
         """Test async saving with composite key and expiration."""
-        async with AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30) as repo:
+        async with AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30
+        ) as repo:
             item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
             await repo.save_with_composite_key(item_data, return_model=False)
 
@@ -753,7 +785,9 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_delete_by_composite_key_debug_mode(self, mock_aioboto3_session, async_mock_table):
         """Test async deleting by composite key in debug mode."""
-        repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         key_dict = {'pk': 'partition1', 'sk': 'sort1'}
 
         await repo.delete_by_composite_key(key_dict)
@@ -780,7 +814,9 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_save_batch_debug_mode(self, mock_aioboto3_session, async_mock_table):
         """Test async batch saving in debug mode."""
-        repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         models = [{'id': 'item1', 'name': 'Item 1'}]
 
         await repo.save_batch(models)
@@ -807,7 +843,9 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_delete_batch_by_keys_debug_logging(self, mock_aioboto3_session, caplog):
         """Test async delete_batch_by_keys debug mode logging."""
-        debug_repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         key_dicts = [{'id': 'item1'}, {'id': 'item2'}]
 
         with caplog.at_level(logging.INFO):
@@ -819,10 +857,15 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_find_all(self, async_repo_context, async_mock_table):
         """Test async finding all items with primary key."""
-        expected_items = [{'id': 'test', 'sk': 'item1', 'name': 'Item 1'}, {'id': 'test', 'sk': 'item2', 'name': 'Item 2'}]
+        expected_items = [
+            {'id': 'test', 'sk': 'item1', 'name': 'Item 1'},
+            {'id': 'test', 'sk': 'item2', 'name': 'Item 2'},
+        ]
 
         # Update the mock to return the expected items
-        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator([{'Items': expected_items}])
+        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator(
+            [{'Items': expected_items}]
+        )
 
         result = await async_repo_context.find_all('test')
 
@@ -843,7 +886,9 @@ class TestAsyncGenericRepository:
         expected_items = [{'id': 'item1', 'name': 'Item 1'}, {'id': 'item2', 'name': 'Item 2'}]
 
         # Update the mock to return the expected items
-        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator([{'Items': expected_items}])
+        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator(
+            [{'Items': expected_items}]
+        )
 
         result = []
         async for item in async_repo_context.load_all():
@@ -858,7 +903,9 @@ class TestAsyncGenericRepository:
         expected_item = {'id': 'test', 'email': 'test@example.com', 'name': 'Test User'}
 
         # Update the mock to return the expected item
-        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator([{'Items': [expected_item]}])
+        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator(
+            [{'Items': [expected_item]}]
+        )
 
         result = await async_repo_context.find_one_with_index('email-index', 'email', 'test@example.com')
 
@@ -870,7 +917,9 @@ class TestAsyncGenericRepository:
         """Test async finding one item with index when not found."""
 
         # Update the mock to return empty results
-        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator([{'Items': []}])
+        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator(
+            [{'Items': []}]
+        )
 
         result = await async_repo_context.find_one_with_index('email-index', 'email', 'nonexistent@example.com')
 
@@ -879,10 +928,15 @@ class TestAsyncGenericRepository:
     @pytest.mark.asyncio
     async def test_find_all_with_index(self, async_repo_context, async_mock_table):
         """Test async finding all items with index."""
-        expected_items = [{'id': 'user1', 'status': 'active', 'name': 'User 1'}, {'id': 'user2', 'status': 'active', 'name': 'User 2'}]
+        expected_items = [
+            {'id': 'user1', 'status': 'active', 'name': 'User 1'},
+            {'id': 'user2', 'status': 'active', 'name': 'User 2'},
+        ]
 
         # Update the mock to return the expected items
-        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator([{'Items': expected_items}])
+        async_mock_table.meta.client.get_paginator.return_value.paginate.return_value = create_async_page_iterator(
+            [{'Items': expected_items}]
+        )
 
         result = await async_repo_context.find_all_with_index('status-index', 'status', 'active')
 
@@ -923,7 +977,8 @@ class TestAsyncGenericRepository:
     async def test_count_client_error(self, async_repo_context, async_mock_table):
         """Test async count method with ClientError."""
         async_mock_table.meta.client.describe_table.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='DescribeTable'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='DescribeTable',
         )
 
         with pytest.raises(ClientError):
@@ -943,7 +998,9 @@ class TestAsyncGenericRepository:
             mock_dynamodb.Table.return_value = async_mock_table
             mock_session_class.return_value = mock_session
 
-            repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-west-2', session=mock_session)
+            repo = AsyncGenericRepository(
+                table_name='test-table', primary_key_name='id', region_name='us-west-2', session=mock_session
+            )
 
             async with repo:
                 # Verify custom session was used
@@ -986,7 +1043,8 @@ class TestAsyncGenericRepository:
         async_mock_table.batch_writer.return_value = mock_batch_context_manager
 
         mock_batch_writer.put_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='BatchWriteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='BatchWriteItem',
         )
 
         with pytest.raises(ClientError):
@@ -1005,7 +1063,8 @@ class TestAsyncGenericRepository:
         async_mock_table.batch_writer.return_value = mock_batch_context_manager
 
         mock_batch_writer.delete_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='BatchWriteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='BatchWriteItem',
         )
 
         with pytest.raises(ClientError):
@@ -1055,7 +1114,9 @@ class TestBothRepositories:
         async_methods_filtered.sort()
 
         # They should have the same public interface
-        assert sync_methods == async_methods_filtered, f'Method mismatch: sync={sync_methods}, async={async_methods_filtered}'
+        assert sync_methods == async_methods_filtered, (
+            f'Method mismatch: sync={sync_methods}, async={async_methods_filtered}'
+        )
 
     def test_both_repositories_can_be_imported(self):
         """Test that both repositories can be imported successfully."""
@@ -1092,7 +1153,10 @@ def sample_dynamodb_item():
 @pytest.fixture
 def mock_client_error():
     """Mock ClientError for testing error scenarios."""
-    return ClientError(error_response={'Error': {'Code': 'ValidationException', 'Message': 'Mock validation error'}}, operation_name='TestOperation')
+    return ClientError(
+        error_response={'Error': {'Code': 'ValidationException', 'Message': 'Mock validation error'}},
+        operation_name='TestOperation',
+    )
 
 
 # ===========================
@@ -1105,7 +1169,9 @@ class TestSyncRepositoryAdditionalCoverage:
 
     def test_save_with_composite_key_debug_logging(self, mock_dynamodb_resource, mock_table, caplog):
         """Test save_with_composite_key debug mode logging."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
         with caplog.at_level(logging.INFO):
@@ -1118,7 +1184,9 @@ class TestSyncRepositoryAdditionalCoverage:
 
     def test_save_batch_debug_logging(self, mock_dynamodb_resource, mock_table, caplog):
         """Test save_batch debug mode logging."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         models = [{'id': 'item1', 'name': 'Item 1'}, {'id': 'item2', 'name': 'Item 2'}]
 
         with caplog.at_level(logging.INFO):
@@ -1130,7 +1198,9 @@ class TestSyncRepositoryAdditionalCoverage:
 
     def test_delete_batch_by_keys_debug_logging(self, mock_dynamodb_resource, mock_table, caplog):
         """Test delete_batch_by_keys debug mode logging."""
-        debug_repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         key_dicts = [{'id': 'item1'}, {'id': 'item2'}]
 
         with caplog.at_level(logging.INFO):
@@ -1157,7 +1227,9 @@ class TestAsyncRepositoryAdditionalCoverage:
     @pytest.mark.asyncio
     async def test_save_with_composite_key_debug_logging(self, mock_aioboto3_session, caplog):
         """Test async save_with_composite_key debug mode logging."""
-        debug_repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
         with caplog.at_level(logging.INFO):
@@ -1181,7 +1253,8 @@ class TestAsyncRepositoryAdditionalCoverage:
     async def test_delete_by_composite_key_client_error(self, async_repo_context, async_mock_table):
         """Test async delete_by_composite_key with ClientError."""
         async_mock_table.delete_item.side_effect = ClientError(
-            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}}, operation_name='DeleteItem'
+            error_response={'Error': {'Code': 'ValidationException', 'Message': 'Test error'}},
+            operation_name='DeleteItem',
         )
 
         with pytest.raises(ClientError):
@@ -1190,7 +1263,9 @@ class TestAsyncRepositoryAdditionalCoverage:
     @pytest.mark.asyncio
     async def test_save_batch_debug_logging(self, mock_aioboto3_session, caplog):
         """Test async save_batch debug mode logging."""
-        debug_repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True)
+        debug_repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', debug_mode=True
+        )
         models = [{'id': 'item1', 'name': 'Item 1'}, {'id': 'item2', 'name': 'Item 2'}]
 
         with caplog.at_level(logging.INFO):
@@ -1286,7 +1361,7 @@ class TestEdgeCasesAndBoundaryConditions:
         model_data = {'name': 'Test Item', 'value': 42}
         mock_table.get_item.return_value = {'Item': {'id': 'test', **model_data}}
 
-        result = sync_repo.save('test', model_data, set_expiration=False)
+        sync_repo.save('test', model_data, set_expiration=False)
 
         # Verify put_item was called
         mock_table.put_item.assert_called_once()
@@ -1299,7 +1374,7 @@ class TestEdgeCasesAndBoundaryConditions:
         model_data = {'name': 'Test Item', 'value': 42}
         async_mock_table.get_item.return_value = {'Item': {'id': 'test', **model_data}}
 
-        result = await async_repo_context.save('test', model_data, set_expiration=False)
+        await async_repo_context.save('test', model_data, set_expiration=False)
 
         # Verify put_item was called
         async_mock_table.put_item.assert_called_once()
@@ -1308,7 +1383,7 @@ class TestEdgeCasesAndBoundaryConditions:
         """Test save_with_composite_key with expiration explicitly disabled."""
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
-        result = sync_repo.save_with_composite_key(item_data, set_expiration=False, return_model=False)
+        sync_repo.save_with_composite_key(item_data, set_expiration=False, return_model=False)
 
         mock_table.put_item.assert_called_once()
         call_args = mock_table.put_item.call_args[1]['Item']
@@ -1319,21 +1394,25 @@ class TestEdgeCasesAndBoundaryConditions:
         """Test async save_with_composite_key with expiration explicitly disabled."""
         item_data = {'pk': 'partition1', 'sk': 'sort1', 'name': 'Test Item'}
 
-        result = await async_repo_context.save_with_composite_key(item_data, set_expiration=False, return_model=False)
+        await async_repo_context.save_with_composite_key(item_data, set_expiration=False, return_model=False)
 
         async_mock_table.put_item.assert_called_once()
 
     def test_sync_repository_with_custom_logger(self, mock_dynamodb_resource, mock_table):
         """Test sync repository with custom logger."""
         custom_logger = logging.getLogger('custom_test_logger')
-        repo = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', logger=custom_logger)
+        repo = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', logger=custom_logger
+        )
 
         assert repo.logger == custom_logger
 
     def test_async_repository_with_custom_logger(self):
         """Test async repository with custom logger."""
         custom_logger = logging.getLogger('custom_async_test_logger')
-        repo = AsyncGenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', logger=custom_logger)
+        repo = AsyncGenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', logger=custom_logger
+        )
 
         assert repo.logger == custom_logger
 
@@ -1410,7 +1489,9 @@ class TestCompleteLineCoverage:
     def test_sync_save_batch_with_items_and_expiration(self, mock_dynamodb_resource, mock_table):
         """Test sync save_batch to specifically cover line 315 (batch_writer.put_item)."""
         # Create repo with expiration enabled
-        repo_with_expiration = GenericRepository(table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30)
+        repo_with_expiration = GenericRepository(
+            table_name='test-table', primary_key_name='id', region_name='us-east-1', data_expiration_days=30
+        )
 
         models = [{'id': 'item1', 'name': 'Item 1'}]
 
