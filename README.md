@@ -7,6 +7,7 @@ A powerful, production-ready Python package for DynamoDB operations with reposit
 - **Dual Interface**: Both sync and async implementations with identical APIs
 - **Repository Pattern**: Clean, standardized interface for DynamoDB operations
 - **Comprehensive Operations**: CRUD, batch operations, queries, and index-based searches
+- **Advanced Filtering**: Powerful client-side filtering with multiple operators and conditions
 - **Auto-Serialization**: Automatic data type conversion for DynamoDB compatibility
 - **Expiration Support**: Built-in TTL handling for automatic data expiration
 - **Composite Key Support**: Full support for partition + sort key tables
@@ -32,17 +33,13 @@ pip install generic-repo[dev]
 ### Synchronous Usage
 
 ```python
-import boto3
 from src import GenericRepository
 
-# Initialize DynamoDB table
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-table = dynamodb.Table('your-table-name')
-
-# Create repository
+# Create repository - no need for boto3 setup!
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',  # Optional: defaults to AWS SDK default
     data_expiration_days=30  # Optional: TTL support
 )
 
@@ -56,29 +53,27 @@ repo.delete('user-123')
 
 ```python
 import asyncio
-import aioboto3
-from generic_repo import AsyncGenericRepository
+from src import AsyncGenericRepository
 
 async def main():
-    # Initialize async DynamoDB session
-    session = aioboto3.Session()
-    
-    async with session.resource('dynamodb', region_name='us-east-1') as dynamodb:
-        table = await dynamodb.Table('your-table-name')
+    # Create async repository - no need for aioboto3 setup!
+    async with AsyncGenericRepository(
+        table_name='your-table-name',
+        primary_key_name='id',
+        region_name='us-east-1',  # Optional: defaults to AWS SDK default
+        data_expiration_days=30
+    ) as repo:
+        # Basic async operations
+        item = await repo.save('user-123', {'name': 'John Doe', 'email': 'john@example.com'})
+        loaded_item = await repo.load('user-123')
         
-        # Create async repository
-        async with AsyncGenericRepository(
-            table=table,
-            primary_key_name='id',
-            data_expiration_days=30
-        ) as repo:
-            # Basic async operations
-            item = await repo.save('user-123', {'name': 'John Doe', 'email': 'john@example.com'})
-            loaded_item = await repo.load('user-123')
+        # Async generator for scanning
+        async for item in repo.load_all():
+            print(item)
             
-            # Async generator for scanning
-            async for item in repo.load_all():
-                print(item)
+        # Async scanning with filters
+        async for item in repo.load_all(filters={'status': 'active'}):
+            print(f"Active item: {item}")
 
 asyncio.run(main())
 ```
@@ -98,9 +93,10 @@ Both `GenericRepository` and `AsyncGenericRepository` provide identical APIs:
 - `delete_batch_by_keys(keys)` / `await delete_batch_by_keys(keys)` - Delete multiple items
 
 ### Query Operations
-- `find_all(partition_key)` / `await find_all(partition_key)` - Find all items with partition key
-- `find_all_with_index(index, key, value)` / `await find_all_with_index(index, key, value)` - Query using GSI/LSI
-- `load_all()` / `async for item in load_all()` - Scan entire table
+- `find_all(partition_key, filters=None)` / `await find_all(partition_key, filters=None)` - Find all items with partition key
+- `find_all_with_index(index, key, value, filters=None)` / `await find_all_with_index(index, key, value, filters=None)` - Query using GSI/LSI
+- `find_one_with_index(index, key, value, filters=None)` / `await find_one_with_index(index, key, value, filters=None)` - Find first item using GSI/LSI
+- `load_all(filters=None)` / `async for item in load_all(filters=None)` - Scan entire table
 
 ### Composite Key Support
 - `load_by_composite_key(key_dict)` / `await load_by_composite_key(key_dict)`
@@ -121,7 +117,7 @@ from src import GenericRepository, AsyncGenericRepository
 
 ```python
 try:
-    repo = GenericRepository(table=table, primary_key_name='id')
+    repo = GenericRepository(table_name='your-table-name', primary_key_name='id', region_name='us-east-1')
     item = repo.load_or_throw('nonexistent-key')
 except ValueError as e:
     print(f"Item not found: {e}")
@@ -132,8 +128,9 @@ except ValueError as e:
 ```python
 # Safe for testing - won't make actual database calls
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',
     debug_mode=True
 )
 ```
@@ -141,15 +138,12 @@ repo = GenericRepository(
 ## Requirements
 
 - Python 3.9+
-- boto3 >= 1.26.0
-- botocore >= 1.29.0
-- aiobotocore >= 2.5.0
-- aioboto3 >= 11.0.0
-- types-aiobotocore[dynamodb] >= 2.5.0
+
+**Note**: boto3, aioboto3, and related dependencies are automatically installed and managed by the package. You don't need to install them manually!
 
 ## License
 
-Proprietary License - See LICENSE file for details.
+MIT License - See LICENSE file for details.
 
 ## Contributing
 
@@ -165,6 +159,7 @@ See CHANGELOG.md for version history and changes.
 - **Comprehensive CRUD Operations**: Create, Read, Update, Delete operations with error handling
 - **Batch Operations**: Efficient batch save and delete operations that automatically handle DynamoDB's 25-item limit
 - **Advanced Querying**: Query operations with automatic pagination support
+- **Powerful Filtering**: Client-side filtering with 12+ operators (eq, ne, gt, lt, contains, between, etc.)
 - **Index Support**: Query operations on Global Secondary Indexes (GSI) and Local Secondary Indexes (LSI)
 - **Automatic Data Serialization**: Handles Python to DynamoDB data type conversion seamlessly
 - **Built-in Expiration**: Optional automatic item expiration using TTL
@@ -194,25 +189,21 @@ pip install -e .
 ## 🔧 Requirements
 
 - Python 3.9+
-- boto3 ~= 1.38.29
-- botocore ~= 1.38.29
+
+**Note**: All AWS dependencies (boto3, aioboto3, botocore, etc.) are automatically managed by the package - no manual installation required!
 
 ## 📖 Quick Start
 
 ### Basic Setup
 
 ```python
-import boto3
 from src import GenericRepository
 
-# Initialize DynamoDB resource
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-table = dynamodb.Table('your-table-name')
-
-# Create repository instance
+# Create repository instance - no boto3 setup needed!
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',  # Optional: defaults to AWS SDK default
     data_expiration_days=30,  # Optional: items expire after 30 days
     debug_mode=False
 )
@@ -289,9 +280,16 @@ repo.delete_batch_by_keys(keys_to_delete)
 # Find all items with a specific partition key
 items = repo.find_all('USER')
 
+# Find items with filtering
+active_users = repo.find_all('USER', filters={'status': 'active'})
+
 # Scan all items in the table (use carefully!)
 for item in repo.load_all():
     print(f"Item: {item}")
+
+# Scan with filtering
+for item in repo.load_all(filters={'age': {'gt': 18}}):
+    print(f"Adult: {item}")
 
 # Count items in table
 total_items = repo.count()
@@ -308,13 +306,162 @@ items = repo.find_all_with_index(
     key_value='john@example.com'
 )
 
+# Query with additional filtering
+active_admins = repo.find_all_with_index(
+    index_name='role-index',
+    key_name='role',
+    key_value='admin',
+    filters={'status': 'active', 'last_login': {'exists': True}}
+)
+
 # Find first matching item from index
 item = repo.find_one_with_index(
     index_name='status-index',
     key_name='status',
     key_value='active'
 )
+
+# Find first item with filtering
+recent_active = repo.find_one_with_index(
+    index_name='status-index',
+    key_name='status',
+    key_value='active',
+    filters={'last_activity': {'gt': '2024-01-01'}}
+)
 ```
+
+## 🔍 Advanced Filtering
+
+The repository supports powerful filtering capabilities for refining query results. Filters can be applied to `load_all()`, `find_all()`, `find_all_with_index()`, and `find_one_with_index()` methods.
+
+### Filter Formats
+
+#### 1. Simple Equality
+```python
+# Find all active users
+active_users = repo.find_all('USER', filters={'status': 'active'})
+
+# Scan for items with specific category
+async for item in repo.load_all(filters={'category': 'electronics'}):
+    print(item)
+```
+
+#### 2. Comparison Operators
+```python
+# Users older than 25
+filters = {'age': {'gt': 25}}
+older_users = repo.find_all('USER', filters=filters)
+
+# Products with price between $10 and $50
+filters = {'price': {'between': [10, 50]}}
+products = repo.find_all('PRODUCT', filters=filters)
+
+# Items with score >= 90
+filters = {'score': {'ge': 90}}
+high_scores = repo.find_all('SCORE', filters=filters)
+```
+
+#### 3. String Operations
+```python
+# Names containing "John"
+filters = {'name': {'contains': 'John'}}
+users = repo.find_all('USER', filters=filters)
+
+# Emails starting with "admin"
+filters = {'email': {'begins_with': 'admin'}}
+admins = repo.find_all('USER', filters=filters)
+```
+
+#### 4. List and Set Operations
+```python
+# Users in specific cities
+filters = {'city': {'in': ['New York', 'Los Angeles', 'Chicago']}}
+city_users = repo.find_all('USER', filters=filters)
+
+# Items with tags containing "python"
+filters = {'tags': {'contains': 'python'}}
+items = repo.find_all('ITEM', filters=filters)
+```
+
+#### 5. Existence Checks
+```python
+# Items that have an optional field
+filters = {'optional_field': {'exists': True}}
+items_with_field = repo.find_all('ITEM', filters=filters)
+
+# Items without deleted_at field (active items)
+filters = {'deleted_at': {'not_exists': True}}
+active_items = repo.find_all('ITEM', filters=filters)
+```
+
+#### 6. Multiple Conditions (AND Logic)
+```python
+# Active users older than 18 in New York
+filters = {
+    'status': 'active',
+    'age': {'gt': 18},
+    'city': 'New York'
+}
+users = repo.find_all('USER', filters=filters)
+```
+
+#### 7. Type-Explicit Filters
+```python
+# For precise numeric comparisons
+filters = {
+    'price': {
+        'value': 19.99,
+        'type': 'N',  # Numeric type
+        'operator': 'ge'
+    }
+}
+products = repo.find_all('PRODUCT', filters=filters)
+```
+
+### Supported Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `eq` | Equals (default) | `{'status': 'active'}` |
+| `ne` | Not equals | `{'status': {'ne': 'deleted'}}` |
+| `lt` | Less than | `{'age': {'lt': 30}}` |
+| `le` | Less than or equal | `{'age': {'le': 30}}` |
+| `gt` | Greater than | `{'score': {'gt': 85}}` |
+| `ge` | Greater than or equal | `{'score': {'ge': 85}}` |
+| `between` | Between two values | `{'age': {'between': [18, 65]}}` |
+| `in` | In list of values | `{'status': {'in': ['active', 'pending']}}` |
+| `contains` | Contains substring/value | `{'name': {'contains': 'John'}}` |
+| `begins_with` | String begins with | `{'email': {'begins_with': 'admin'}}` |
+| `exists` | Attribute exists | `{'phone': {'exists': True}}` |
+| `not_exists` | Attribute doesn't exist | `{'deleted_at': {'not_exists': True}}` |
+
+### Filtering with Index Queries
+
+```python
+# Find active users in a specific index with additional filters
+active_admins = repo.find_all_with_index(
+    index_name='role-index',
+    key_name='role',
+    key_value='admin',
+    filters={'status': 'active', 'last_login': {'exists': True}}
+)
+
+# Async version
+async for user in repo.find_all_with_index(
+    index_name='status-index',
+    key_name='status', 
+    key_value='active',
+    filters={'age': {'gt': 21}}
+):
+    print(f"Adult active user: {user['name']}")
+```
+
+### Performance Notes
+
+- Filters are applied **after** the initial query/scan operation
+- For better performance, use proper indexing strategies rather than relying solely on filters
+- Filters work on the client side after data retrieval, so they don't reduce DynamoDB read costs
+- Consider using GSI/LSI for frequently filtered attributes
 
 ## 🏗️ Advanced Configuration
 
@@ -328,8 +475,9 @@ logger = logging.getLogger('my-app')
 logger.setLevel(logging.INFO)
 
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',
     logger=logger
 )
 ```
@@ -339,8 +487,9 @@ repo = GenericRepository(
 ```python
 # Enable debug mode to skip actual database operations
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',
     debug_mode=True  # Perfect for unit testing
 )
 ```
@@ -350,8 +499,9 @@ repo = GenericRepository(
 ```python
 # Items will automatically expire after 7 days
 repo = GenericRepository(
-    table=table,
+    table_name='your-table-name',
     primary_key_name='id',
+    region_name='us-east-1',
     data_expiration_days=7
 )
 ```
@@ -398,7 +548,7 @@ ruff format .
 
 ## 📄 License
 
-This project is licensed under the Proprietary License. See the LICENSE file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.
 
 ## 🔗 Links
 
@@ -415,7 +565,9 @@ This project is licensed under the Proprietary License. See the LICENSE file for
 ## 🎯 Roadmap
 
 - [x] Async/await support for better performance
+- [x] Advanced filtering with multiple operators and conditions
 - [ ] More advanced query builders
+- [ ] OR logic support for filters
 - [ ] Built-in caching layer
 - [ ] CloudFormation templates for common DynamoDB setups
 - [ ] Integration with AWS CDK
