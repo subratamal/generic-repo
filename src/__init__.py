@@ -2,34 +2,34 @@
 Generic DynamoDB Repository Package
 
 This package provides both synchronous and asynchronous repository classes
-for DynamoDB operations with a consistent interface.
+for DynamoDB operations with a consistent interface, plus filtering utilities.
 
 Classes:
     GenericRepository: Synchronous DynamoDB repository
     AsyncGenericRepository: Asynchronous DynamoDB repository
+    FilterHelper: Utility class for building DynamoDB filter expressions
 
 Example:
     from src import GenericRepository, AsyncGenericRepository
 
-    # Sync usage
-    repo = GenericRepository(table=table, primary_key_name='id')
-    item = repo.load('key1')
+    # Sync usage with filtering
+    repo = GenericRepository(table_name='my-table', primary_key_name='id')
+    for item in repo.load_all(filters={'status': 'active', 'age': {'gt': 18}}):
+        print(item)
 
-    # Async usage
-    async with AsyncGenericRepository(table=async_table, primary_key_name='id') as repo:
-        item = await repo.load('key1')
+    # Async usage with filtering
+    async with AsyncGenericRepository(table_name='my-table', primary_key_name='id') as repo:
+        async for item in repo.load_all(filters={'status': 'active'}):
+            print(item)
 """
 
 from .async_repo import AsyncGenericRepository
-
-# Import both repository classes
+from .filter_helper import FilterHelper
 from .sync_repo import GenericRepository
 
-# Export both classes
-__all__ = ['GenericRepository', 'AsyncGenericRepository']
+__all__ = ['GenericRepository', 'AsyncGenericRepository', 'FilterHelper']
 
-# Package metadata
-__version__ = '1.0.0'
+__version__ = '2.0.0'
 __author__ = 'Subrat'
-__email__ = '06.subrata@gmail.com'
+__email__ = 'subratamal@gmail.com'
 __description__ = 'Generic DynamoDB Repository with sync and async support'

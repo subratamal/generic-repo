@@ -9,6 +9,8 @@ import aioboto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+from .filter_helper import FilterHelper
+
 
 class AsyncGenericRepository:
     """
@@ -418,23 +420,49 @@ class AsyncGenericRepository:
             self.logger.error(f'Error in find_all: {e}')
             raise
 
-    async def load_all(self) -> AsyncGenerator[Dict[str, Any], None]:
+    async def load_all(self, filters: Optional[Dict[str, Any]] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Scan and yield all items in the table.
+        Scan and yield all items in the table with optional filtering.
 
         Uses DynamoDB Scan operation with automatic pagination. This is an expensive
         operation that reads the entire table, so use sparingly and prefer query
         operations when possible.
 
+        Args:
+            filters: Optional dictionary containing filter conditions in JSON format.
+                    Supports multiple formats:
+                    - Simple equality: {"status": "active"}
+                    - Operator format: {"age": {"gt": 18}}
+                    - With type hints: {"price": {"value": 19.99, "type": "N", "operator": "ge"}}
+
+                    Supported operators: eq, ne, lt, le, gt, ge, between, in, contains,
+                    begins_with, exists, not_exists
+
+                    Examples:
+                    - {"status": "active", "age": {"gt": 18}}
+                    - {"name": {"begins_with": "John"}}
+                    - {"tags": {"contains": "python"}}
+                    - {"score": {"between": [10, 20]}}
+                    - {"category": {"in": ["tech", "science"]}}
+
         Yields:
-            Dictionary containing each item in the table
+            Dictionary containing each item in the table that matches the filters
 
         Raises:
             ClientError: If there's an error communicating with DynamoDB
+            ValueError: If filter format is invalid
         """
         try:
+            scan_params = {'TableName': self.table_name}
+
+            # Build filter expression if filters are provided
+            if filters:
+                filter_expression = FilterHelper.build_filter_expression(filters)
+                if filter_expression:
+                    scan_params['FilterExpression'] = filter_expression
+
             paginator = self.table.meta.client.get_paginator('scan')
-            page_iterator = paginator.paginate(TableName=self.table_name)
+            page_iterator = paginator.paginate(**scan_params)
 
             async for page in page_iterator:
                 for item in page.get('Items', []):
