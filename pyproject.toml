@@ -1,6 +1,6 @@
 [project]
 name = "generic-repo"
-version = "1.0.0"
+version = "2.0.0"
 description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern (sync and async)"
 readme = "README.md"
 requires-python = ">=3.9"
