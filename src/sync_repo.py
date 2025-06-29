@@ -366,22 +366,39 @@ class GenericRepository:
     # QUERY OPERATIONS
     # ===========================
 
-    def find_all(self, primary_key_value: Any) -> List[Dict[str, Any]]:
+    def find_all(self, primary_key_value: Any, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Find all items with the given primary key value.
+        Find all items with the given primary key value, with optional filtering.
 
         Uses DynamoDB Query operation with automatic pagination to retrieve all
         items that match the primary key. For composite key tables, this returns
-        all items with the given partition key across all sort keys.
+        all items with the given partition key across all sort keys. Additional
+        filters can be applied to further narrow down the results.
 
         Args:
             primary_key_value: Value of the primary key (partition key) to search for
+            filters: Optional dictionary containing filter conditions in JSON format.
+                    Supports multiple formats:
+                    - Simple equality: {"status": "active"}
+                    - Operator format: {"age": {"gt": 18}}
+                    - With type hints: {"price": {"value": 19.99, "type": "N", "operator": "ge"}}
+
+                    Supported operators: eq, ne, lt, le, gt, ge, between, in, contains,
+                    begins_with, exists, not_exists
+
+                    Examples:
+                    - {"status": "active", "age": {"gt": 18}}
+                    - {"name": {"begins_with": "John"}}
+                    - {"tags": {"contains": "python"}}
+                    - {"score": {"between": [10, 20]}}
+                    - {"category": {"in": ["tech", "science"]}}
 
         Returns:
             List of dictionaries containing all matching items. Empty list if none found
 
         Raises:
             ClientError: If there's an error communicating with DynamoDB
+            ValueError: If filter format is invalid
         """
         if not primary_key_value:
             return []
@@ -389,8 +406,16 @@ class GenericRepository:
         try:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
+            query_params = {'TableName': table_name, 'KeyConditionExpression': Key(self.primary_key_name).eq(primary_key_value)}
+
+            # Build filter expression if filters are provided
+            if filters:
+                filter_expression = FilterHelper.build_filter_expression(filters)
+                if filter_expression:
+                    query_params['FilterExpression'] = filter_expression
+
             paginator = self.table.meta.client.get_paginator('query')
-            page_iterator = paginator.paginate(TableName=table_name, KeyConditionExpression=Key(self.primary_key_name).eq(primary_key_value))
+            page_iterator = paginator.paginate(**query_params)
 
             items = []
             for page in page_iterator:
@@ -458,47 +483,77 @@ class GenericRepository:
     # INDEX-BASED QUERY OPERATIONS
     # ===========================
 
-    def find_one_with_index(self, index_name: str, key_name: str, key_value: Any) -> Optional[Dict[str, Any]]:
+    def find_one_with_index(
+        self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Find the first item matching the index query.
+        Find the first item matching the index query, with optional filtering.
 
         Args:
             index_name: Name of the GSI (Global Secondary Index) or LSI (Local Secondary Index)
             key_name: Name of the index key attribute to query on
             key_value: Value to search for in the index
+            filters: Optional dictionary containing filter conditions in JSON format.
+                    Supports the same filter formats as find_all_with_index.
 
         Returns:
             Dictionary containing the first matching item, or None if not found
 
         Raises:
             ClientError: If there's an error communicating with DynamoDB
+            ValueError: If filter format is invalid
         """
-        items = self.find_all_with_index(index_name, key_name, key_value)
+        items = self.find_all_with_index(index_name, key_name, key_value, filters)
         return items[0] if items else None
 
-    def find_all_with_index(self, index_name: str, key_name: str, key_value: Any) -> List[Dict[str, Any]]:
+    def find_all_with_index(self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Find all items matching the index query.
+        Find all items matching the index query, with optional filtering.
 
         Uses DynamoDB Query operation on a specified index with automatic pagination
-        to retrieve all matching items.
+        to retrieve all matching items. Additional filters can be applied to further
+        narrow down the results.
 
         Args:
             index_name: Name of the GSI (Global Secondary Index) or LSI (Local Secondary Index)
             key_name: Name of the index key attribute to query on
             key_value: Value to search for in the index
+            filters: Optional dictionary containing filter conditions in JSON format.
+                    Supports multiple formats:
+                    - Simple equality: {"status": "active"}
+                    - Operator format: {"age": {"gt": 18}}
+                    - With type hints: {"price": {"value": 19.99, "type": "N", "operator": "ge"}}
+
+                    Supported operators: eq, ne, lt, le, gt, ge, between, in, contains,
+                    begins_with, exists, not_exists
+
+                    Examples:
+                    - {"status": "active", "age": {"gt": 18}}
+                    - {"name": {"begins_with": "John"}}
+                    - {"tags": {"contains": "python"}}
+                    - {"score": {"between": [10, 20]}}
+                    - {"category": {"in": ["tech", "science"]}}
 
         Returns:
             List of dictionaries containing all matching items. Empty list if none found
 
         Raises:
             ClientError: If there's an error communicating with DynamoDB
+            ValueError: If filter format is invalid
         """
         try:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
+            query_params = {'TableName': table_name, 'IndexName': index_name, 'KeyConditionExpression': Key(key_name).eq(key_value)}
+
+            # Build filter expression if filters are provided
+            if filters:
+                filter_expression = FilterHelper.build_filter_expression(filters)
+                if filter_expression:
+                    query_params['FilterExpression'] = filter_expression
+
             paginator = self.table.meta.client.get_paginator('query')
-            page_iterator = paginator.paginate(TableName=table_name, IndexName=index_name, KeyConditionExpression=Key(key_name).eq(key_value))
+            page_iterator = paginator.paginate(**query_params)
 
             items = []
             for page in page_iterator:
