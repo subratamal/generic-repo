@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Generator, List, Optional
 
+import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
@@ -22,10 +23,14 @@ class GenericRepository:
     The repository supports both simple primary key tables and composite key tables
     (partition key + sort key).
 
+    Authentication uses AWS default credentials from environment variables by default.
+    Optionally accepts a pre-configured boto3 session for custom authentication.
+
         Example:
         >>> repo = GenericRepository(
-        ...     table=dynamodb_table,
+        ...     table_name='my-table',
         ...     primary_key_name='id',
+        ...     region_name='us-west-2',
         ...     data_expiration_days=30
         ... )
         >>> item = repo.save('key1', {'name': 'value'})
@@ -34,8 +39,10 @@ class GenericRepository:
 
     def __init__(
         self,
-        table,
+        table_name: str,
         primary_key_name: str,
+        region_name: Optional[str] = None,
+        session: Optional[boto3.Session] = None,
         logger: Optional[logging.Logger] = None,
         data_expiration_days: Optional[int] = None,
         debug_mode: bool = False,
@@ -44,20 +51,28 @@ class GenericRepository:
         Initialize the GenericRepository.
 
         Args:
-            table: The boto3 DynamoDB table resource
+            table_name: Name of the DynamoDB table
             primary_key_name: Name of the primary key attribute (partition key)
+            region_name: AWS region name (optional, uses default if not provided)
+            session: Pre-configured boto3 session (optional, creates new if not provided)
             logger: Optional logger instance. If None, creates a default logger
             data_expiration_days: Optional number of days after which items expire.
                                  If set, adds '_expireAt' field to saved items
             debug_mode: If True, skips actual database operations for testing
         """
-        self.table = table
-        # Automatically deduce table name from the table resource
-        self.table_name = table.table_name
+        self.table_name = table_name
         self.primary_key_name = primary_key_name
         self.logger = logger or logging.getLogger(__name__)
         self.data_expiration_days = data_expiration_days
         self.debug_mode = debug_mode
+
+        # Initialize AWS session and DynamoDB resource
+        if session:
+            self._dynamodb = session.resource('dynamodb', region_name=region_name)
+        else:
+            self._dynamodb = boto3.resource('dynamodb', region_name=region_name)
+
+        self.table = self._dynamodb.Table(table_name)
 
     # ===========================
     # PRIVATE UTILITY METHODS
@@ -159,9 +174,7 @@ class GenericRepository:
     # BASIC WRITE/DELETE OPERATIONS
     # ===========================
 
-    def save(
-        self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    def save(self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = True) -> Optional[Dict[str, Any]]:
         """
         Save an item to the table.
 
@@ -200,9 +213,7 @@ class GenericRepository:
             self.logger.error(f'Error saving item: {e}')
             raise
 
-    def save_with_composite_key(
-        self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    def save_with_composite_key(self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = True) -> Optional[Dict[str, Any]]:
         """
         Save an item to a table with composite key (partition + sort key).
 
@@ -377,9 +388,7 @@ class GenericRepository:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
             paginator = self.table.meta.client.get_paginator('query')
-            page_iterator = paginator.paginate(
-                TableName=table_name, KeyConditionExpression=Key(self.primary_key_name).eq(primary_key_value)
-            )
+            page_iterator = paginator.paginate(TableName=table_name, KeyConditionExpression=Key(self.primary_key_name).eq(primary_key_value))
 
             items = []
             for page in page_iterator:
@@ -461,9 +470,7 @@ class GenericRepository:
             # Get the actual table name from the table resource
             table_name = getattr(self.table, 'table_name', self.table_name)
             paginator = self.table.meta.client.get_paginator('query')
-            page_iterator = paginator.paginate(
-                TableName=table_name, IndexName=index_name, KeyConditionExpression=Key(key_name).eq(key_value)
-            )
+            page_iterator = paginator.paginate(TableName=table_name, IndexName=index_name, KeyConditionExpression=Key(key_name).eq(key_value))
 
             items = []
             for page in page_iterator:

@@ -1,7 +1,7 @@
 [project]
 name = "generic-repo"
 version = "1.0.0"
-description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern"
+description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern (sync and async)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Proprietary" }
@@ -17,7 +17,9 @@ keywords = [
     "orm",
     "data-access",
     "crud",
-    "batch-operations"
+    "batch-operations",
+    "async",
+    "asyncio",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -33,10 +35,14 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Typing :: Typed",
+    "Framework :: AsyncIO",
 ]
 dependencies = [
     "boto3>=1.26.0",
-    "botocore>=1.29.0"
+    "botocore>=1.29.0",
+    "aiobotocore>=2.5.0",
+    "aioboto3>=11.0.0",
+    "types-aiobotocore[dynamodb]>=2.5.0",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +51,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "pytest-asyncio>=0.21.0",
     "mypy>=1.0.0",
     "bandit>=1.7.0",
     "types-boto3>=1.0.0",
@@ -55,12 +62,9 @@ test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "pytest-asyncio>=0.21.0",
 ]
-docs = [
-    "sphinx>=5.0.0",
-    "sphinx-rtd-theme>=1.2.0",
-    "myst-parser>=0.18.0",
-]
+docs = ["sphinx>=5.0.0", "sphinx-rtd-theme>=1.2.0", "myst-parser>=0.18.0"]
 
 [project.urls]
 Homepage = "https://github.com/subratamal/generic-repo"
@@ -73,6 +77,13 @@ Changelog = "https://github.com/subratamal/generic-repo/blob/main/CHANGELOG.md"
 requires = ["setuptools>=60", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*", "docs*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"
@@ -82,7 +93,7 @@ lint.select = ["E", "F", "I", "W"]
 lint.ignore = ["E501"]
 
 # Configure isort rules
-lint.isort.known-first-party = ["generic_repo"]
+lint.isort.known-first-party = ["src"]
 
 # Configure formatter
 format.quote-style = "single"

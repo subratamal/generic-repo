@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Basic usage examples for Generic DynamoDB Repository.
+Basic usage examples for GenericRepository and AsyncGenericRepository.
 
-This script demonstrates common usage patterns and operations
-with the GenericRepository class.
+This example demonstrates how to use both sync and async versions of the
+GenericRepository for common DynamoDB operations.
 
 Requirements:
 - AWS credentials configured (via AWS CLI, IAM role, or environment variables)
 - A DynamoDB table created (or use the create_sample_table function)
 """
 
+import asyncio
 import logging
-from decimal import Decimal
 
+# Import both sync and async repositories
 import boto3
-
-from generic_repo import GenericRepository
+from generic_repo import AsyncGenericRepository, GenericRepository
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +48,41 @@ def create_sample_table(table_name: str = 'sample-generic-repo-table'):
                 {
                     'AttributeName': 'id',
                     'AttributeType': 'S',  # String
-                }
+                },
+                {
+                    'AttributeName': 'email',
+                    'AttributeType': 'S',  # String
+                },
+                {
+                    'AttributeName': 'status',
+                    'AttributeType': 'S',  # String
+                },
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'email-index',
+                    'KeySchema': [
+                        {
+                            'AttributeName': 'email',
+                            'KeyType': 'HASH',  # Partition key for the GSI
+                        }
+                    ],
+                    'Projection': {
+                        'ProjectionType': 'ALL',  # Include all attributes
+                    },
+                },
+                {
+                    'IndexName': 'status-index',
+                    'KeySchema': [
+                        {
+                            'AttributeName': 'status',
+                            'KeyType': 'HASH',  # Partition key for the GSI
+                        }
+                    ],
+                    'Projection': {
+                        'ProjectionType': 'ALL',  # Include all attributes
+                    },
+                },
             ],
             BillingMode='PAY_PER_REQUEST',
         )
@@ -65,95 +99,20 @@ def create_sample_table(table_name: str = 'sample-generic-repo-table'):
         return dynamodb.Table(table_name)
 
 
-def basic_crud_operations():
-    """Demonstrate basic CRUD operations."""
-    logger.info('=== Basic CRUD Operations ===')
+def create_composite_key_table(table_name: str = 'my-composite-table'):
+    """
+    Create a sample DynamoDB table with composite key (partition + sort key) for testing.
 
-    # Initialize DynamoDB table
-    table = create_sample_table()
+    Args:
+        table_name: Name of the table to create
 
-    # Create repository
-    repo = GenericRepository(
-        table=table,
-        primary_key_name='id',
-        data_expiration_days=30,  # Items expire after 30 days
-        debug_mode=False,
-    )
-
-    # 1. CREATE - Save a new item
-    user_data = {
-        'name': 'John Doe',
-        'email': 'john.doe@example.com',
-        'age': 30,
-        'preferences': {'notifications': True, 'theme': 'dark'},
-        'tags': ['developer', 'python', 'aws'],
-    }
-
-    logger.info('Saving user...')
-    saved_user = repo.save('user-123', user_data)
-    logger.info(f'Saved user: {saved_user}')
-
-    # 2. READ - Load the item
-    logger.info('Loading user...')
-    loaded_user = repo.load('user-123')
-    logger.info(f'Loaded user: {loaded_user}')
-
-    # 3. UPDATE - Save with modified data
-    user_data['age'] = 31
-    user_data['last_updated'] = '2024-12-19'
-
-    logger.info('Updating user...')
-    updated_user = repo.save('user-123', user_data)
-    logger.info(f'Updated user: {updated_user}')
-
-    # 4. DELETE - Remove the item
-    logger.info('Deleting user...')
-    repo.delete('user-123')
-
-    # Verify deletion
-    deleted_user = repo.load('user-123')
-    logger.info(f'User after deletion: {deleted_user}')
-
-
-def batch_operations():
-    """Demonstrate batch operations for better performance."""
-    logger.info('\n=== Batch Operations ===')
-
-    table = create_sample_table()
-    repo = GenericRepository(table=table, primary_key_name='id')
-
-    # Batch save multiple items
-    users = [
-        {'id': 'user-001', 'name': 'Alice Johnson', 'email': 'alice@example.com', 'department': 'Engineering'},
-        {'id': 'user-002', 'name': 'Bob Smith', 'email': 'bob@example.com', 'department': 'Marketing'},
-        {'id': 'user-003', 'name': 'Carol Williams', 'email': 'carol@example.com', 'department': 'Sales'},
-    ]
-
-    logger.info('Batch saving users...')
-    repo.save_batch(users)
-    logger.info(f'Saved {len(users)} users in batch')
-
-    # Load individual items to verify
-    for user in users:
-        loaded = repo.load(user['id'])
-        logger.info(f'Verified user {user["id"]}: {loaded["name"]}')
-
-    # Batch delete
-    keys_to_delete = [{'id': user['id']} for user in users]
-    logger.info('Batch deleting users...')
-    repo.delete_batch_by_keys(keys_to_delete)
-    logger.info(f'Deleted {len(keys_to_delete)} users in batch')
-
-
-def composite_key_operations():
-    """Demonstrate operations with composite keys (partition + sort key)."""
-    logger.info('\n=== Composite Key Operations ===')
-
-    # Create table with composite key
+    Returns:
+        The created table resource
+    """
     dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-    table_name = 'sample-composite-table'
 
     try:
+        # Create table with composite key
         table = dynamodb.create_table(
             TableName=table_name,
             KeySchema=[
@@ -167,158 +126,241 @@ def composite_key_operations():
                 },
             ],
             AttributeDefinitions=[
-                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
-                {'AttributeName': 'user_id', 'AttributeType': 'S'},
+                {
+                    'AttributeName': 'tenant_id',
+                    'AttributeType': 'S',  # String
+                },
+                {
+                    'AttributeName': 'user_id',
+                    'AttributeType': 'S',  # String
+                },
             ],
             BillingMode='PAY_PER_REQUEST',
         )
 
+        # Wait for table to be created
+        logger.info(f'Creating composite key table {table_name}...')
         table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
-        logger.info(f'Composite key table created: {table_name}')
+        logger.info(f'Composite key table {table_name} created successfully!')
+
+        return table
 
     except dynamodb.meta.client.exceptions.ResourceInUseException:
-        table = dynamodb.Table(table_name)
-        logger.info(f'Using existing composite key table: {table_name}')
+        logger.info(f'Composite key table {table_name} already exists')
+        return dynamodb.Table(table_name)
 
-    # Create repository for composite key table
+
+def setup_tables():
+    """Create all necessary tables for the examples."""
+    print('=== Setting up tables ===')
+
+    # Create main table for sync/async examples
+    create_sample_table('my-table')
+
+    # Create composite key table
+    create_composite_key_table('my-composite-table')
+
+    print('All tables are ready!')
+    print()
+
+
+def sync_example():
+    """Example using the synchronous GenericRepository."""
+    print('=== Synchronous Repository Example ===')
+
+    # Initialize the repository - no need to create boto3 resources!
     repo = GenericRepository(
-        table=table,
-        primary_key_name='tenant_id',  # Still need to specify partition key
-    )
-
-    # Save with composite key
-    user_data = {
-        'tenant_id': 'company-a',
-        'user_id': 'emp-123',
-        'name': 'David Brown',
-        'role': 'Manager',
-        'salary': Decimal('75000.00'),
-    }
-
-    logger.info('Saving with composite key...')
-    repo.save_with_composite_key(user_data)
-
-    # Load with composite key
-    composite_key = {'tenant_id': 'company-a', 'user_id': 'emp-123'}
-
-    logger.info('Loading with composite key...')
-    loaded_user = repo.load_by_composite_key(composite_key)
-    logger.info(f'Loaded composite key user: {loaded_user}')
-
-    # Clean up
-    repo.delete_by_composite_key(composite_key)
-
-
-def query_operations():
-    """Demonstrate query operations and pagination."""
-    logger.info('\n=== Query Operations ===')
-
-    table = create_sample_table()
-    repo = GenericRepository(table=table, primary_key_name='id')
-
-    # Add some test data
-    test_data = [
-        {'id': 'order-001', 'customer_id': 'customer-a', 'amount': Decimal('100.50')},
-        {'id': 'order-002', 'customer_id': 'customer-a', 'amount': Decimal('250.00')},
-        {'id': 'order-003', 'customer_id': 'customer-b', 'amount': Decimal('75.25')},
-    ]
-
-    logger.info('Adding test data...')
-    repo.save_batch(test_data)
-
-    # Count total items
-    total_count = repo.count()
-    logger.info(f'Total items in table: {total_count}')
-
-    # Scan all items (use carefully on large tables!)
-    logger.info('Scanning all items...')
-    all_items = list(repo.load_all())
-    logger.info(f'Found {len(all_items)} items via scan')
-
-    # Clean up
-    cleanup_keys = [{'id': item['id']} for item in test_data]
-    repo.delete_batch_by_keys(cleanup_keys)
-
-
-def error_handling():
-    """Demonstrate error handling patterns."""
-    logger.info('\n=== Error Handling ===')
-
-    table = create_sample_table()
-    repo = GenericRepository(table=table, primary_key_name='id')
-
-    # Try to load non-existent item
-    logger.info('Loading non-existent item...')
-    result = repo.load('non-existent-key')
-    logger.info(f'Non-existent item result: {result}')
-
-    # Use load_or_throw for required items
-    try:
-        logger.info('Using load_or_throw on non-existent item...')
-        repo.load_or_throw('non-existent-key')
-    except ValueError as e:
-        logger.info(f'Caught expected error: {e}')
-
-
-def debug_mode_example():
-    """Demonstrate debug mode for testing."""
-    logger.info('\n=== Debug Mode Example ===')
-
-    table = create_sample_table()
-
-    # Create repository in debug mode
-    debug_repo = GenericRepository(
-        table=table,
+        table_name='my-table',
         primary_key_name='id',
-        debug_mode=True,  # This will skip actual database operations
+        region_name='us-east-1',  # Optional: specify region
+        logger=logger,
+        data_expiration_days=30,
+        debug_mode=False,  # Set to False for actual DynamoDB operations
     )
 
-    # Operations in debug mode won't actually execute
-    logger.info('Saving in debug mode (no actual database operation)...')
-    result = debug_repo.save('debug-key', {'name': 'Debug User'})
-    logger.info(f'Debug save result: {result}')
+    # Basic operations
+    try:
+        # Save an item
+        item_data = {'name': 'John Doe', 'email': 'john@example.com', 'age': 30, 'metadata': {'created_by': 'system'}}
+        saved_item = repo.save('user-123', item_data)
+        print(f'Saved item: {saved_item}')
 
-    logger.info('Loading in debug mode...')
-    result = debug_repo.load('debug-key')
-    logger.info(f'Debug load result: {result}')
+        # Load an item
+        loaded_item = repo.load('user-123')
+        print(f'Loaded item: {loaded_item}')
+
+        # Save multiple items in batch
+        batch_items = [
+            {'id': 'user-124', 'name': 'Jane Doe', 'email': 'jane@example.com'},
+            {'id': 'user-125', 'name': 'Bob Smith', 'email': 'bob@example.com'},
+        ]
+        repo.save_batch(batch_items)
+        print('Batch save completed')
+
+        # Find all items with a specific partition key
+        items = repo.find_all('user-123')
+        print(f'Found {len(items)} items')
+
+        # Count total items
+        count = repo.count()
+        print(f'Total items in table: {count}')
+
+    except Exception as e:
+        print(f'Error in sync operations: {e}')
 
 
-def cleanup_tables():
-    """Clean up sample tables."""
-    logger.info('\n=== Cleanup ===')
+async def async_example():
+    """Example using the asynchronous AsyncGenericRepository."""
+    print('\n=== Asynchronous Repository Example ===')
 
-    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-
-    tables_to_delete = ['sample-generic-repo-table', 'sample-composite-table']
-
-    for table_name in tables_to_delete:
+    # Initialize the async repository with context manager - no need to create aioboto3 resources!
+    async with AsyncGenericRepository(
+        table_name='my-table',
+        primary_key_name='id',
+        region_name='us-east-1',  # Optional: specify region
+        logger=logger,
+        data_expiration_days=30,
+        debug_mode=False,  # Set to True for debugging
+    ) as repo:
         try:
-            table = dynamodb.Table(table_name)
-            table.delete()
-            logger.info(f'Deleted table: {table_name}')
+            # Save an item
+            item_data = {
+                'name': 'Alice Johnson',
+                'email': 'alice@example.com',
+                'age': 28,
+                'metadata': {'created_by': 'async_system'},
+            }
+            saved_item = await repo.save('user-async-123', item_data)
+            print(f'Async saved item: {saved_item}')
+
+            # Load an item
+            loaded_item = await repo.load('user-async-123')
+            print(f'Async loaded item: {loaded_item}')
+
+            # Save multiple items in batch
+            batch_items = [
+                {'id': 'user-async-124', 'name': 'Charlie Brown', 'email': 'charlie@example.com'},
+                {'id': 'user-async-125', 'name': 'Diana Prince', 'email': 'diana@example.com'},
+            ]
+            await repo.save_batch(batch_items)
+            print('Async batch save completed')
+
+            # Find all items with a specific partition key
+            items = await repo.find_all('user-async-123')
+            print(f'Async found {len(items)} items')
+
+            # Load all items using async generator
+            print('Loading all items asynchronously:')
+            count = 0
+            async for item in repo.load_all():
+                count += 1
+                if count <= 3:  # Show first 3 items
+                    print(f'  Item {count}: {item.get("name", "N/A")}')
+                if count >= 10:  # Limit output
+                    break
+            print(f'Total items processed: {count}')
+
+            # Count total items
+            total_count = await repo.count()
+            print(f'Total items in table: {total_count}')
+
         except Exception as e:
-            logger.info(f'Could not delete table {table_name}: {e}')
+            print(f'Error in async operations: {e}')
+
+
+def composite_key_example():
+    """Example using composite key operations."""
+    print('\n=== Composite Key Example ===')
+
+    # Initialize repository with partition key name
+    repo = GenericRepository(
+        table_name='my-composite-table',
+        primary_key_name='tenant_id',  # This is the partition key
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    )
+
+    try:
+        # Save item with composite key (partition + sort key)
+        item_data = {
+            'tenant_id': 'tenant-123',
+            'user_id': 'user-456',  # This is the sort key
+            'name': 'Composite User',
+            'email': 'composite@example.com',
+        }
+        saved_item = repo.save_with_composite_key(item_data)
+        print(f'Saved composite key item: {saved_item}')
+
+        # Load item by composite key
+        key_dict = {'tenant_id': 'tenant-123', 'user_id': 'user-456'}
+        loaded_item = repo.load_by_composite_key(key_dict)
+        print(f'Loaded composite key item: {loaded_item}')
+
+        # Find all items with the same partition key
+        items = repo.find_all('tenant-123')
+        print(f'Found {len(items)} items for tenant-123')
+
+        # Delete by composite key
+        repo.delete_by_composite_key(key_dict)
+        print('Deleted composite key item')
+
+    except Exception as e:
+        print(f'Error in composite key operations: {e}')
+
+
+def index_query_example():
+    """Example using index-based queries."""
+    print('\n=== Index Query Example ===')
+
+    # Use the table with indexes for this example
+    repo = GenericRepository(
+        table_name='my-table',
+        primary_key_name='id',
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    )
+
+    try:
+        # First, add some sample data to query
+        sample_users = [
+            {'id': 'user-001', 'name': 'John Doe', 'email': 'john@example.com', 'status': 'active'},
+            {'id': 'user-002', 'name': 'Jane Smith', 'email': 'jane@example.com', 'status': 'inactive'},
+            {'id': 'user-003', 'name': 'Bob Johnson', 'email': 'bob@example.com', 'status': 'active'},
+        ]
+
+        print('Adding sample data for index queries...')
+        repo.save_batch(sample_users)
+
+        # Query using Global Secondary Index (GSI) - email-index
+        items = repo.find_all_with_index(index_name='email-index', key_name='email', key_value='john@example.com')
+        print(f'Found {len(items)} items with email john@example.com')
+        if items:
+            print(f'  User: {items[0].get("name", "N/A")}')
+
+        # Find first item matching index query - status-index
+        item = repo.find_one_with_index(index_name='status-index', key_name='status', key_value='active')
+        print(f'First active item: {item.get("name", "N/A") if item else "None"}')
+
+        # Find all active users
+        active_items = repo.find_all_with_index(index_name='status-index', key_name='status', key_value='active')
+        print(f'Found {len(active_items)} active users')
+
+    except Exception as e:
+        print(f'Error in index query operations: {e}')
 
 
 if __name__ == '__main__':
-    logger.info('Starting Generic DynamoDB Repository Examples')
+    # Setup tables first
+    setup_tables()
 
-    try:
-        # Run all examples
-        basic_crud_operations()
-        batch_operations()
-        composite_key_operations()
-        query_operations()
-        error_handling()
-        debug_mode_example()
+    # Run synchronous examples
+    # sync_example()
+    # composite_key_example()
+    # index_query_example()
 
-    except Exception as e:
-        logger.error(f'Example failed: {e}')
-        raise
+    # Run asynchronous example
+    asyncio.run(async_example())
 
-    finally:
-        # Uncomment to clean up tables after running examples
-        # cleanup_tables()
-        pass
-
-    logger.info('Examples completed successfully!')
+    print('\n=== All Examples Completed ===')
