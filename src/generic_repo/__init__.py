@@ -10,7 +10,7 @@ Classes:
     FilterHelper: Utility class for building DynamoDB filter expressions
 
 Example:
-    from src import GenericRepository, AsyncGenericRepository
+    from generic_repo import GenericRepository, AsyncGenericRepository
 
     # Sync usage with filtering
     repo = GenericRepository(table_name='my-table', primary_key_name='id')
@@ -29,7 +29,7 @@ from .sync_repo import GenericRepository
 
 __all__ = ['GenericRepository', 'AsyncGenericRepository', 'FilterHelper']
 
-__version__ = '2.0.0'
+__version__ = '2.0.2'
 __author__ = 'Subrat'
 __email__ = 'subratamal@gmail.com'
 __description__ = 'Generic DynamoDB Repository with sync and async support'

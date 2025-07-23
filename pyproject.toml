@@ -1,6 +1,6 @@
 [project]
 name = "generic-repo"
-version = "2.0.0"
+version = "2.0.2"
 description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern (sync and async)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -74,15 +74,18 @@ Changelog = "https://github.com/subratamal/generic-repo/blob/main/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/subratamal/generic-repo/issues"
 
 [build-system]
-requires = ["setuptools>=60", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
+[tool.hatch.build]
+package-dir = "src"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-exclude = ["tests*", "docs*"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/generic_repo"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/generic_repo/*.py", "README.md", "LICENSE", "CHANGELOG.md"]
+exclude = ["*egg-info*"]
 
 [tool.ruff]
 line-length = 120

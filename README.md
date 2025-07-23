@@ -33,7 +33,7 @@ pip install generic-repo[dev]
 ### Synchronous Usage
 
 ```python
-from src import GenericRepository
+from generic_repo import GenericRepository
 
 # Create repository - no need for boto3 setup!
 repo = GenericRepository(
@@ -53,7 +53,7 @@ repo.delete('user-123')
 
 ```python
 import asyncio
-from src import AsyncGenericRepository
+from generic_repo import AsyncGenericRepository
 
 async def main():
     # Create async repository - no need for aioboto3 setup!
@@ -108,7 +108,7 @@ Both `GenericRepository` and `AsyncGenericRepository` provide identical APIs:
 ### For PyPI Package Users
 
 ```python
-from src import GenericRepository, AsyncGenericRepository
+from generic_repo import GenericRepository, AsyncGenericRepository
 
 # Both sync and async functionality included out of the box
 ```
@@ -197,7 +197,7 @@ pip install -e .
 ### Basic Setup
 
 ```python
-from src import GenericRepository
+from generic_repo import GenericRepository
 
 # Create repository instance - no boto3 setup needed!
 repo = GenericRepository(
