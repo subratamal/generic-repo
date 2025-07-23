@@ -29,7 +29,7 @@ from .sync_repo import GenericRepository
 
 __all__ = ['GenericRepository', 'AsyncGenericRepository', 'FilterHelper']
 
-__version__ = '2.0.2'
+__version__ = '2.0.3'
 __author__ = 'Subrat'
 __email__ = 'subratamal@gmail.com'
 __description__ = 'Generic DynamoDB Repository with sync and async support'

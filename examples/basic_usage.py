@@ -15,6 +15,7 @@ import logging
 
 # Import both sync and async repositories
 import boto3
+
 from generic_repo import AsyncGenericRepository, GenericRepository
 
 # Configure logging
@@ -197,6 +198,15 @@ def sync_example():
         repo.save_batch(batch_items)
         print('Batch save completed')
 
+        # Update an existing item (partial update)
+        update_data = {'status': 'active', 'last_login': '2024-01-01T10:30:00Z'}
+        updated_item = repo.update('user-123', update_data)
+        print(f'Updated item: {updated_item}')
+
+        # Update with expiration
+        repo.update('user-124', {'status': 'premium'}, set_expiration=True)
+        print('Updated user-124 with expiration')
+
         # Find all items with a specific partition key
         items = repo.find_all('user-123')
         print(f'Found {len(items)} items')
@@ -331,6 +341,15 @@ async def async_example():
             ]
             await repo.save_batch(batch_items)
             print('Async batch save completed')
+
+            # Update an existing item (partial update)
+            update_data = {'status': 'active', 'last_login': '2024-01-01T10:30:00Z'}
+            updated_item = await repo.update('user-async-123', update_data)
+            print(f'Async updated item: {updated_item}')
+
+            # Update with expiration
+            await repo.update('user-async-124', {'status': 'premium'}, set_expiration=True)
+            print('Async updated user-async-124 with expiration')
 
             # Find all items with a specific partition key
             items = await repo.find_all('user-async-123')
@@ -533,6 +552,15 @@ def composite_key_example():
         loaded_item = repo.load_by_composite_key(key_dict)
         print(f'Loaded composite key item: {loaded_item}')
 
+        # Update item by composite key (partial update)
+        update_data = {'status': 'verified', 'last_updated': '2024-01-01T15:45:00Z'}
+        updated_item = repo.update_by_composite_key(key_dict, update_data)
+        print(f'Updated composite key item: {updated_item}')
+
+        # Update with expiration
+        repo.update_by_composite_key(key_dict, {'plan': 'enterprise'}, set_expiration=True)
+        print('Updated composite key item with expiration')
+
         # Find all items with the same partition key
         items = repo.find_all('tenant-123')
         print(f'Found {len(items)} items for tenant-123')
@@ -593,12 +621,118 @@ def index_query_example():
         filtered_item = repo.find_one_with_index(
             index_name='status-index', key_name='status', key_value='active', filters={'name': {'begins_with': 'B'}}
         )
-        print(
-            f'First active user with name starting with "B": {filtered_item.get("name", "None") if filtered_item else "None"}'
-        )
+        print(f'First active user with name starting with "B": {filtered_item.get("name", "None") if filtered_item else "None"}')
 
     except Exception as e:
         print(f'Error in index query operations: {e}')
+
+
+async def async_composite_key_example():
+    """Example using async composite key operations including updates."""
+    print('\n=== Async Composite Key Example ===')
+
+    # Initialize async repository with partition key name
+    async with AsyncGenericRepository(
+        table_name='my-composite-table',
+        primary_key_name='tenant_id',  # This is the partition key
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    ) as repo:
+        try:
+            # Save item with composite key (partition + sort key)
+            item_data = {
+                'tenant_id': 'async-tenant-123',
+                'user_id': 'async-user-456',  # This is the sort key
+                'name': 'Async Composite User',
+                'email': 'async-composite@example.com',
+                'status': 'pending',
+            }
+            saved_item = await repo.save_with_composite_key(item_data)
+            print(f'Async saved composite key item: {saved_item}')
+
+            # Load item by composite key
+            key_dict = {'tenant_id': 'async-tenant-123', 'user_id': 'async-user-456'}
+            loaded_item = await repo.load_by_composite_key(key_dict)
+            print(f'Async loaded composite key item: {loaded_item}')
+
+            # Update item by composite key (partial update)
+            update_data = {'status': 'active', 'last_login': '2024-01-01T16:30:00Z', 'login_count': 1}
+            updated_item = await repo.update_by_composite_key(key_dict, update_data)
+            print(f'Async updated composite key item: {updated_item}')
+
+            # Another update with different fields
+            await repo.update_by_composite_key(key_dict, {'login_count': 5, 'plan': 'premium'}, set_expiration=True)
+            print('Async updated composite key item with expiration')
+
+            # Load the updated item to see all changes
+            final_item = await repo.load_by_composite_key(key_dict)
+            print(f'Final composite key item state: {final_item}')
+
+            # Find all items with the same partition key
+            items = await repo.find_all('async-tenant-123')
+            print(f'Async found {len(items)} items for async-tenant-123')
+
+            # Clean up - delete by composite key
+            await repo.delete_by_composite_key(key_dict)
+            print('Async deleted composite key item')
+
+        except Exception as e:
+            print(f'Error in async composite key operations: {e}')
+
+
+def reserved_keywords_update_example():
+    """Example demonstrating updates with DynamoDB reserved keywords."""
+    print('\n=== Reserved Keywords Update Example ===')
+
+    repo = GenericRepository(
+        table_name='my-table',
+        primary_key_name='id',
+        region_name='us-east-1',
+        logger=logger,
+        debug_mode=False,
+    )
+
+    try:
+        # Create a test item with various reserved keywords as field names
+        test_data = {
+            'name': 'Test User',
+            'status': 'inactive',  # reserved keyword
+            'size': 'large',  # reserved keyword
+            'type': 'premium',  # reserved keyword
+            'order': 1,  # reserved keyword
+            'count': 0,  # reserved keyword
+            'data': {'nested': 'value'},  # reserved keyword
+        }
+
+        # Save the item
+        saved_item = repo.save('reserved-test-001', test_data)
+        print(f'Saved item with reserved keywords: {saved_item}')
+
+        # Update multiple reserved keyword fields at once
+        update_data = {
+            'status': 'active',  # reserved keyword
+            'size': 'medium',  # reserved keyword
+            'type': 'enterprise',  # reserved keyword
+            'count': 5,  # reserved keyword
+            'order': 10,  # reserved keyword
+            'data': {'updated': 'successfully'},  # reserved keyword
+        }
+
+        updated_item = repo.update('reserved-test-001', update_data)
+        print(f'Updated item with reserved keywords: {updated_item}')
+
+        # Verify the update worked by loading the item
+        loaded_item = repo.load('reserved-test-001')
+        if loaded_item:
+            print('Verification - loaded item shows updates:')
+            for key in ['status', 'size', 'type', 'count', 'order']:
+                print(f'  {key}: {loaded_item.get(key)}')
+        else:
+            print('Warning: Could not load item for verification')
+
+    except Exception as e:
+        print(f'Error in reserved keywords update operations: {e}')
 
 
 if __name__ == '__main__':
@@ -614,5 +748,7 @@ if __name__ == '__main__':
     # Run asynchronous example
     asyncio.run(async_example())
     asyncio.run(filtering_example())
+    asyncio.run(async_composite_key_example())
+    reserved_keywords_update_example()
 
     print('\n=== All Examples Completed ===')

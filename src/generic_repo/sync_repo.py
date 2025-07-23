@@ -108,6 +108,38 @@ class GenericRepository:
         """
         return json.loads(json.dumps(data, default=str), parse_float=Decimal)
 
+    def _build_update_expression(self, data: Dict[str, Any]) -> tuple:
+        """
+        Build DynamoDB update expression components from data dictionary.
+
+        Args:
+            data: Dictionary containing the fields to update
+
+        Returns:
+            Tuple containing:
+            - update_expression: The SET expression string
+            - expression_attribute_names: Dictionary mapping placeholders to field names
+            - expression_attribute_values: Dictionary mapping placeholders to values
+        """
+        if not data:
+            return '', {}, {}
+
+        update_expression = 'SET '
+        expression_attribute_names = {}
+        expression_attribute_values = {}
+
+        for key, value in data.items():
+            attr_name = f'#{key}'
+            attr_value = f':{key}'
+            update_expression += f'{attr_name} = {attr_value}, '
+            expression_attribute_names[attr_name] = key
+            expression_attribute_values[attr_value] = value
+
+        # Remove trailing comma and space
+        update_expression = update_expression.rstrip(', ')
+
+        return update_expression, expression_attribute_names, expression_attribute_values
+
     # ===========================
     # BASIC READ OPERATIONS
     # ===========================
@@ -173,11 +205,11 @@ class GenericRepository:
         return item
 
     # ===========================
-    # BASIC WRITE/DELETE OPERATIONS
+    # BASIC WRITE/UPDATE/DELETE OPERATIONS
     # ===========================
 
     def save(
-        self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
+        self, primary_key_value: Any, model: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
     ) -> Optional[Dict[str, Any]]:
         """
         Save an item to the table.
@@ -217,9 +249,7 @@ class GenericRepository:
             self.logger.error(f'Error saving item: {e}')
             raise
 
-    def save_with_composite_key(
-        self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    def save_with_composite_key(self, item_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False) -> Optional[Dict[str, Any]]:
         """
         Save an item to a table with composite key (partition + sort key).
 
@@ -260,6 +290,115 @@ class GenericRepository:
             self.logger.error(f'Error saving item with composite key: {e}')
             raise
 
+    def update(
+        self, primary_key_value: Any, update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update an existing item with partial data using simple primary key.
+
+        Args:
+            primary_key_value: Value for the primary key
+            update_data: Dictionary containing the fields to update
+            return_model: If True, returns the updated item after successful update
+            set_expiration: If True and data_expiration_days is set, adds expiration
+
+        Returns:
+            Dictionary containing the updated item if return_model=True, otherwise None
+            In debug mode, always returns None
+
+        Raises:
+            ClientError: If there's an error communicating with DynamoDB
+        """
+        if self.debug_mode:
+            self.logger.info(f'Debug mode: skipping update to {self.table_name} for {primary_key_value}')
+            return None
+
+        if not update_data:
+            return self.load(primary_key_value) if return_model else None
+
+        # Make a copy to avoid modifying the original
+        data = update_data.copy()
+
+        # Add expiration if configured
+        if set_expiration and self.data_expiration_days:
+            data['_expireAt'] = self._get_expire_at_epoch(self.data_expiration_days)
+
+        # Serialize for DynamoDB compatibility
+        data = self._serialize_for_dynamodb(data)
+
+        # Build update expression
+        update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
+
+        try:
+            response = self.table.update_item(
+                Key={self.primary_key_name: primary_key_value},
+                UpdateExpression=update_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values,
+                ReturnValues='ALL_NEW' if return_model else 'NONE',
+            )
+
+            if return_model:
+                return response.get('Attributes')
+        except ClientError as e:
+            self.logger.error(f'Error updating item: {e}')
+            raise
+
+    def update_by_composite_key(
+        self, key_dict: Dict[str, Any], update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update an existing item with partial data using composite key.
+
+        Args:
+            key_dict: Dictionary containing both partition and sort key values
+                     Example: {'partition_key': 'value1', 'sort_key': 'value2'}
+            update_data: Dictionary containing the fields to update
+            return_model: If True, returns the updated item after successful update
+            set_expiration: If True and data_expiration_days is set, adds expiration
+
+        Returns:
+            Dictionary containing the updated item if return_model=True, otherwise None
+            In debug mode, always returns None
+
+        Raises:
+            ClientError: If there's an error communicating with DynamoDB
+        """
+        if self.debug_mode:
+            self.logger.info(f'Debug mode: skipping composite key update to {self.table_name}')
+            return None
+
+        if not update_data:
+            return self.load_by_composite_key(key_dict) if return_model else None
+
+        # Make a copy to avoid modifying the original
+        data = update_data.copy()
+
+        # Add expiration if configured
+        if set_expiration and self.data_expiration_days:
+            data['_expireAt'] = self._get_expire_at_epoch(self.data_expiration_days)
+
+        # Serialize for DynamoDB compatibility
+        data = self._serialize_for_dynamodb(data)
+
+        # Build update expression
+        update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
+
+        try:
+            response = self.table.update_item(
+                Key=key_dict,
+                UpdateExpression=update_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values,
+                ReturnValues='ALL_NEW' if return_model else 'NONE',
+            )
+
+            if return_model:
+                return response.get('Attributes')
+        except ClientError as e:
+            self.logger.error(f'Error updating item by composite key: {e}')
+            raise
+
     def delete_by_composite_key(self, key_dict: Dict[str, Any]) -> None:
         """
         Delete an item by composite key.
@@ -285,7 +424,7 @@ class GenericRepository:
     # BATCH OPERATIONS
     # ===========================
 
-    def save_batch(self, models: List[Dict[str, Any]], set_expiration: bool = True) -> None:
+    def save_batch(self, models: List[Dict[str, Any]], set_expiration: bool = False) -> None:
         """
         Save multiple items in batch for improved performance.
 
@@ -513,9 +652,7 @@ class GenericRepository:
         items = self.find_all_with_index(index_name, key_name, key_value, filters)
         return items[0] if items else None
 
-    def find_all_with_index(
-        self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    def find_all_with_index(self, index_name: str, key_name: str, key_value: Any, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Find all items matching the index query, with optional filtering.
 
