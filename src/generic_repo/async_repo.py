@@ -3,10 +3,11 @@ import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import (Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple,
+                    Union)
 
 import aioboto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 from .filter_helper import FilterHelper
@@ -164,6 +165,27 @@ class AsyncGenericRepository:
 
         return update_expression, expression_attribute_names, expression_attribute_values
 
+    def _build_condition_expression(self, conditions: Union[Dict[str, Any], Any]) -> Optional[Any]:
+        """
+        Build DynamoDB condition expression from simple dict or return as-is if already a ConditionBase.
+
+        Args:
+            conditions: Either a dict like {'status': {'lt': 10}} or a boto3 ConditionBase
+
+        Returns:
+            DynamoDB ConditionExpression or None
+        """
+        # If already a ConditionBase (from boto3), return as-is
+        if hasattr(conditions, '__class__') and 'ConditionBase' in str(conditions.__class__.__bases__):
+            return conditions
+        
+        # If it's a dict, use FilterHelper to convert it
+        if isinstance(conditions, dict):
+            return FilterHelper.build_filter_expression(conditions)
+        
+        # Otherwise return as-is (might be None or already a condition)
+        return conditions
+
     # ===========================
     # BASIC READ OPERATIONS
     # ===========================
@@ -317,8 +339,14 @@ class AsyncGenericRepository:
             raise
 
     async def update(
-        self, primary_key_value: Any, update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
-    ) -> Optional[Dict[str, Any]]:
+        self,
+        primary_key_value: Any,
+        update_data: Dict[str, Any],
+        return_model: bool = True,
+        set_expiration: bool = False,
+        conditions: Optional[Union[Dict[str, Any], Any]] = None,
+        rejection_message: Optional[str] = None,
+    ) -> Union[Optional[Dict[str, Any]], Dict[str, Any]]:
         """
         Update an existing item with partial data using simple primary key.
 
@@ -327,13 +355,41 @@ class AsyncGenericRepository:
             update_data: Dictionary containing the fields to update
             return_model: If True, returns the updated item after successful update
             set_expiration: If True and data_expiration_days is set, adds expiration
+            conditions: Optional conditions for the update. Can be either:
+                       1. Simple dict format (recommended):
+                          {'status': {'lt': 10}}
+                          {'status': 'active'}
+                          {'status': {'eq': 'active'}, 'version': {'gt': 5}}
+                       2. boto3 ConditionExpression (for advanced use):
+                          Attr('status').eq('active')
+                       
+                       Supported operators in dict format:
+                       - eq: equals (default), ne: not equals
+                       - lt, le, gt, ge: comparison operators
+                       - between: [min, max], in: [val1, val2]
+                       - contains, begins_with
+                       - exists: True, not_exists: True
+                       
+                       Examples:
+                       - {'status': 'active'}  # status must be 'active'
+                       - {'version': {'lt': 10}}  # version must be < 10
+                       - {'locked': {'ne': True}}  # locked must not be True
+                       - {'status': 'draft', 'approved': False}  # AND logic
+                       
+                       If condition fails, returns {'success': False, 'message': str}
+            rejection_message: Custom message to return when condition fails.
+                              If not provided, uses DynamoDB's error message.
 
         Returns:
-            Dictionary containing the updated item if return_model=True, otherwise None
+            If update succeeds:
+                - Dictionary containing the updated item if return_model=True
+                - None if return_model=False
+            If update is rejected by conditions:
+                - Dictionary with {'success': False, 'message': str, 'error_code': str}
             In debug mode, always returns None
 
         Raises:
-            ClientError: If there's an error communicating with DynamoDB
+            ClientError: If there's an error communicating with DynamoDB (except condition check failures)
         """
         if self.debug_mode:
             self.logger.info(f'Debug mode: skipping update to {self.table_name} for {primary_key_value}')
@@ -356,23 +412,49 @@ class AsyncGenericRepository:
         update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
 
         try:
-            response = await self.table.update_item(
-                Key={self.primary_key_name: primary_key_value},
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attribute_values,
-                ReturnValues='ALL_NEW' if return_model else 'NONE',
-            )
+            update_params = {
+                'Key': {self.primary_key_name: primary_key_value},
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeNames': expression_attribute_names,
+                'ExpressionAttributeValues': expression_attribute_values,
+                'ReturnValues': 'ALL_NEW' if return_model else 'NONE',
+            }
+
+            # Build and add condition expression if provided
+            if conditions is not None:
+                condition_expr = self._build_condition_expression(conditions)
+                if condition_expr is not None:
+                    update_params['ConditionExpression'] = condition_expr
+
+            response = await self.table.update_item(**update_params)
 
             if return_model:
                 return response.get('Attributes')
         except ClientError as e:
+            # Handle condition check failure
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'ConditionalCheckFailedException':
+                error_message = e.response.get('Error', {}).get('Message', 'Condition check failed')
+                message = rejection_message or f"Update condition not met: {error_message}"
+                self.logger.info(f'Update rejected for {primary_key_value}: {message}')
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'ConditionalCheckFailedException',
+                }
+            # Re-raise other errors
             self.logger.error(f'Error updating item: {e}')
             raise
 
     async def update_by_composite_key(
-        self, key_dict: Dict[str, Any], update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
-    ) -> Optional[Dict[str, Any]]:
+        self,
+        key_dict: Dict[str, Any],
+        update_data: Dict[str, Any],
+        return_model: bool = True,
+        set_expiration: bool = False,
+        conditions: Optional[Union[Dict[str, Any], Any]] = None,
+        rejection_message: Optional[str] = None,
+    ) -> Union[Optional[Dict[str, Any]], Dict[str, Any]]:
         """
         Update an existing item with partial data using composite key.
 
@@ -382,13 +464,41 @@ class AsyncGenericRepository:
             update_data: Dictionary containing the fields to update
             return_model: If True, returns the updated item after successful update
             set_expiration: If True and data_expiration_days is set, adds expiration
+            conditions: Optional conditions for the update. Can be either:
+                       1. Simple dict format (recommended):
+                          {'status': {'lt': 10}}
+                          {'status': 'active'}
+                          {'status': {'eq': 'active'}, 'version': {'gt': 5}}
+                       2. boto3 ConditionExpression (for advanced use):
+                          Attr('status').eq('active')
+                       
+                       Supported operators in dict format:
+                       - eq: equals (default), ne: not equals
+                       - lt, le, gt, ge: comparison operators
+                       - between: [min, max], in: [val1, val2]
+                       - contains, begins_with
+                       - exists: True, not_exists: True
+                       
+                       Examples:
+                       - {'status': 'active'}  # status must be 'active'
+                       - {'version': {'lt': 10}}  # version must be < 10
+                       - {'locked': {'ne': True}}  # locked must not be True
+                       - {'status': 'draft', 'approved': False}  # AND logic
+                       
+                       If condition fails, returns {'success': False, 'message': str}
+            rejection_message: Custom message to return when condition fails.
+                              If not provided, uses DynamoDB's error message.
 
         Returns:
-            Dictionary containing the updated item if return_model=True, otherwise None
+            If update succeeds:
+                - Dictionary containing the updated item if return_model=True
+                - None if return_model=False
+            If update is rejected by conditions:
+                - Dictionary with {'success': False, 'message': str, 'error_code': str}
             In debug mode, always returns None
 
         Raises:
-            ClientError: If there's an error communicating with DynamoDB
+            ClientError: If there's an error communicating with DynamoDB (except condition check failures)
         """
         if self.debug_mode:
             self.logger.info(f'Debug mode: skipping composite key update to {self.table_name}')
@@ -411,17 +521,37 @@ class AsyncGenericRepository:
         update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
 
         try:
-            response = await self.table.update_item(
-                Key=key_dict,
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attribute_values,
-                ReturnValues='ALL_NEW' if return_model else 'NONE',
-            )
+            update_params = {
+                'Key': key_dict,
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeNames': expression_attribute_names,
+                'ExpressionAttributeValues': expression_attribute_values,
+                'ReturnValues': 'ALL_NEW' if return_model else 'NONE',
+            }
+
+            # Build and add condition expression if provided
+            if conditions is not None:
+                condition_expr = self._build_condition_expression(conditions)
+                if condition_expr is not None:
+                    update_params['ConditionExpression'] = condition_expr
+
+            response = await self.table.update_item(**update_params)
 
             if return_model:
                 return response.get('Attributes')
         except ClientError as e:
+            # Handle condition check failure
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'ConditionalCheckFailedException':
+                error_message = e.response.get('Error', {}).get('Message', 'Condition check failed')
+                message = rejection_message or f"Update condition not met: {error_message}"
+                self.logger.info(f'Update rejected for {key_dict}: {message}')
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'ConditionalCheckFailedException',
+                }
+            # Re-raise other errors
             self.logger.error(f'Error updating item by composite key: {e}')
             raise
 

@@ -1,11 +1,12 @@
+import base64
 import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 from .filter_helper import FilterHelper
@@ -108,6 +109,32 @@ class GenericRepository:
         """
         return json.loads(json.dumps(data, default=str), parse_float=Decimal)
 
+    def _quote_partiql_identifier(self, identifier: str) -> str:
+        """Quote identifiers for use in PartiQL statements."""
+        return f'"{identifier.replace('"', '""')}"'
+
+    def _to_partiql_literal(self, value: Any) -> str:
+        """Render a Python value as a PartiQL literal for primary key usage."""
+        if isinstance(value, str):
+            escaped = value.replace("'", "''")
+            return f"'{escaped}'"
+
+        if isinstance(value, bool):
+            return 'TRUE' if value else 'FALSE'
+
+        if isinstance(value, (int, Decimal)):
+            return str(value)
+
+        if isinstance(value, float):
+            # Convert through Decimal to avoid scientific notation that DynamoDB rejects
+            return str(Decimal(str(value)))
+
+        if isinstance(value, bytes):
+            encoded = base64.b64encode(value).decode('ascii')
+            return f"FROM_BASE64('{encoded}')"
+
+        raise TypeError(f'Unsupported primary key type for PartiQL literal conversion: {type(value)!r}')
+
     def _build_update_expression(self, data: Dict[str, Any]) -> tuple:
         """
         Build DynamoDB update expression components from data dictionary.
@@ -139,6 +166,27 @@ class GenericRepository:
         update_expression = update_expression.rstrip(', ')
 
         return update_expression, expression_attribute_names, expression_attribute_values
+
+    def _build_condition_expression(self, conditions: Union[Dict[str, Any], Any]) -> Optional[Any]:
+        """
+        Build DynamoDB condition expression from simple dict or return as-is if already a ConditionBase.
+
+        Args:
+            conditions: Either a dict like {'status': {'lt': 10}} or a boto3 ConditionBase
+
+        Returns:
+            DynamoDB ConditionExpression or None
+        """
+        # If already a ConditionBase (from boto3), return as-is
+        if hasattr(conditions, '__class__') and 'ConditionBase' in str(conditions.__class__.__bases__):
+            return conditions
+        
+        # If it's a dict, use FilterHelper to convert it
+        if isinstance(conditions, dict):
+            return FilterHelper.build_filter_expression(conditions)
+        
+        # Otherwise return as-is (might be None or already a condition)
+        return conditions
 
     # ===========================
     # BASIC READ OPERATIONS
@@ -291,8 +339,14 @@ class GenericRepository:
             raise
 
     def update(
-        self, primary_key_value: Any, update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
-    ) -> Optional[Dict[str, Any]]:
+        self,
+        primary_key_value: Any,
+        update_data: Dict[str, Any],
+        return_model: bool = True,
+        set_expiration: bool = False,
+        conditions: Optional[Union[Dict[str, Any], Any]] = None,
+        rejection_message: Optional[str] = None,
+    ) -> Union[Optional[Dict[str, Any]], Dict[str, Any]]:
         """
         Update an existing item with partial data using simple primary key.
 
@@ -301,13 +355,41 @@ class GenericRepository:
             update_data: Dictionary containing the fields to update
             return_model: If True, returns the updated item after successful update
             set_expiration: If True and data_expiration_days is set, adds expiration
+            conditions: Optional conditions for the update. Can be either:
+                       1. Simple dict format (recommended):
+                          {'status': {'lt': 10}}
+                          {'status': 'active'}
+                          {'status': {'eq': 'active'}, 'version': {'gt': 5}}
+                       2. boto3 ConditionExpression (for advanced use):
+                          Attr('status').eq('active')
+                       
+                       Supported operators in dict format:
+                       - eq: equals (default), ne: not equals
+                       - lt, le, gt, ge: comparison operators
+                       - between: [min, max], in: [val1, val2]
+                       - contains, begins_with
+                       - exists: True, not_exists: True
+                       
+                       Examples:
+                       - {'status': 'active'}  # status must be 'active'
+                       - {'version': {'lt': 10}}  # version must be < 10
+                       - {'locked': {'ne': True}}  # locked must not be True
+                       - {'status': 'draft', 'approved': False}  # AND logic
+                       
+                       If condition fails, returns {'success': False, 'message': str}
+            rejection_message: Custom message to return when condition fails.
+                              If not provided, uses DynamoDB's error message.
 
         Returns:
-            Dictionary containing the updated item if return_model=True, otherwise None
+            If update succeeds:
+                - Dictionary containing the updated item if return_model=True
+                - None if return_model=False
+            If update is rejected by conditions:
+                - Dictionary with {'success': False, 'message': str, 'error_code': str}
             In debug mode, always returns None
 
         Raises:
-            ClientError: If there's an error communicating with DynamoDB
+            ClientError: If there's an error communicating with DynamoDB (except condition check failures)
         """
         if self.debug_mode:
             self.logger.info(f'Debug mode: skipping update to {self.table_name} for {primary_key_value}')
@@ -330,23 +412,49 @@ class GenericRepository:
         update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
 
         try:
-            response = self.table.update_item(
-                Key={self.primary_key_name: primary_key_value},
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attribute_values,
-                ReturnValues='ALL_NEW' if return_model else 'NONE',
-            )
+            update_params = {
+                'Key': {self.primary_key_name: primary_key_value},
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeNames': expression_attribute_names,
+                'ExpressionAttributeValues': expression_attribute_values,
+                'ReturnValues': 'ALL_NEW' if return_model else 'NONE',
+            }
+
+            # Build and add condition expression if provided
+            if conditions is not None:
+                condition_expr = self._build_condition_expression(conditions)
+                if condition_expr is not None:
+                    update_params['ConditionExpression'] = condition_expr
+
+            response = self.table.update_item(**update_params)
 
             if return_model:
                 return response.get('Attributes')
         except ClientError as e:
+            # Handle condition check failure
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'ConditionalCheckFailedException':
+                error_message = e.response.get('Error', {}).get('Message', 'Condition check failed')
+                message = rejection_message or f"Update condition not met: {error_message}"
+                self.logger.info(f'Update rejected for {primary_key_value}: {message}')
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'ConditionalCheckFailedException',
+                }
+            # Re-raise other errors
             self.logger.error(f'Error updating item: {e}')
             raise
 
     def update_by_composite_key(
-        self, key_dict: Dict[str, Any], update_data: Dict[str, Any], return_model: bool = True, set_expiration: bool = False
-    ) -> Optional[Dict[str, Any]]:
+        self,
+        key_dict: Dict[str, Any],
+        update_data: Dict[str, Any],
+        return_model: bool = True,
+        set_expiration: bool = False,
+        conditions: Optional[Union[Dict[str, Any], Any]] = None,
+        rejection_message: Optional[str] = None,
+    ) -> Union[Optional[Dict[str, Any]], Dict[str, Any]]:
         """
         Update an existing item with partial data using composite key.
 
@@ -356,19 +464,50 @@ class GenericRepository:
             update_data: Dictionary containing the fields to update
             return_model: If True, returns the updated item after successful update
             set_expiration: If True and data_expiration_days is set, adds expiration
+            conditions: Optional conditions for the update. Can be either:
+                       1. Simple dict format (recommended):
+                          {'status': {'lt': 10}}
+                          {'status': 'active'}
+                          {'status': {'eq': 'active'}, 'version': {'gt': 5}}
+                       2. boto3 ConditionExpression (for advanced use):
+                          Attr('status').eq('active')
+                       
+                       Supported operators in dict format:
+                       - eq: equals (default), ne: not equals
+                       - lt, le, gt, ge: comparison operators
+                       - between: [min, max], in: [val1, val2]
+                       - contains, begins_with
+                       - exists: True, not_exists: True
+                       
+                       Examples:
+                       - {'status': 'active'}  # status must be 'active'
+                       - {'version': {'lt': 10}}  # version must be < 10
+                       - {'locked': {'ne': True}}  # locked must not be True
+                       - {'status': 'draft', 'approved': False}  # AND logic
+                       
+                       If condition fails, returns {'success': False, 'message': str}
+            rejection_message: Custom message to return when condition fails.
+                              If not provided, uses DynamoDB's error message.
 
         Returns:
-            Dictionary containing the updated item if return_model=True, otherwise None
+            If update succeeds:
+                - Dictionary containing the updated item if return_model=True
+                - None if return_model=False
+            If update is rejected by conditions:
+                - Dictionary with {'success': False, 'message': str, 'error_code': str}
             In debug mode, always returns None
 
         Raises:
-            ClientError: If there's an error communicating with DynamoDB
+            ClientError: If there's an error communicating with DynamoDB (except condition check failures)
         """
+        self.logger.info(f'updating composite key {key_dict} with update_data {update_data}')
+        
         if self.debug_mode:
-            self.logger.info(f'Debug mode: skipping composite key update to {self.table_name}')
+            self.logger.info(f'Debug mode: skipping composite key update to {self.table_name} with key_dict {key_dict}')
             return None
 
         if not update_data:
+            self.logger.info(f'skipping composite key update to {self.table_name} because update_data is empty with key_dict {key_dict}')
             return self.load_by_composite_key(key_dict) if return_model else None
 
         # Make a copy to avoid modifying the original
@@ -377,25 +516,46 @@ class GenericRepository:
         # Add expiration if configured
         if set_expiration and self.data_expiration_days:
             data['_expireAt'] = self._get_expire_at_epoch(self.data_expiration_days)
-
+        
         # Serialize for DynamoDB compatibility
         data = self._serialize_for_dynamodb(data)
-
+        
         # Build update expression
         update_expression, expression_attribute_names, expression_attribute_values = self._build_update_expression(data)
-
+        
         try:
-            response = self.table.update_item(
-                Key=key_dict,
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attribute_values,
-                ReturnValues='ALL_NEW' if return_model else 'NONE',
-            )
+            update_params = {
+                'Key': key_dict,
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeNames': expression_attribute_names,
+                'ExpressionAttributeValues': expression_attribute_values,
+                'ReturnValues': 'ALL_NEW' if return_model else 'NONE',
+            }
 
+            # Build and add condition expression if provided
+            if conditions is not None:
+                condition_expr = self._build_condition_expression(conditions)
+                if condition_expr is not None:
+                    update_params['ConditionExpression'] = condition_expr
+
+            response = self.table.update_item(**update_params)
+            
             if return_model:
+                self.logger.info(f'returning response {response.get('Attributes')}')
                 return response.get('Attributes')
         except ClientError as e:
+            # Handle condition check failure
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'ConditionalCheckFailedException':
+                error_message = e.response.get('Error', {}).get('Message', 'Condition check failed')
+                message = rejection_message or f"Update condition not met: {error_message}"
+                self.logger.info(f'Update rejected for {key_dict}: {message}')
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'ConditionalCheckFailedException',
+                }
+            # Re-raise other errors
             self.logger.error(f'Error updating item by composite key: {e}')
             raise
 
@@ -418,6 +578,38 @@ class GenericRepository:
             self.table.delete_item(Key=key_dict)
         except ClientError as e:
             self.logger.error(f'Error deleting item: {e}')
+            raise
+
+    def delete_all_by_primary_key(self, primary_key_value: Any) -> None:
+        """
+        Delete all items sharing the given primary key using PartiQL.
+
+        Intended for tables that use a composite key (partition + sort key).
+        Removes every item with the specified partition key value.
+
+        Args:
+            primary_key_value: Value of the partition key whose items should be deleted
+
+        Raises:
+            ClientError: If there's an error communicating with DynamoDB
+        """
+        if self.debug_mode:
+            self.logger.info(f'Debug mode: skipping delete of all items with {self.primary_key_name}={primary_key_value} from {self.table_name}')
+            return
+
+        if primary_key_value is None:
+            return
+
+        table_name = getattr(self.table, 'table_name', self.table_name)
+        quoted_table = self._quote_partiql_identifier(table_name)
+        quoted_pk = self._quote_partiql_identifier(self.primary_key_name)
+        literal_value = self._to_partiql_literal(primary_key_value)
+        statement = f'DELETE FROM {quoted_table} WHERE {quoted_pk} = {literal_value}'
+
+        try:
+            self.table.meta.client.execute_statement(Statement=statement)
+        except ClientError as e:
+            self.logger.error(f'Error deleting items with primary key {self.primary_key_name}={primary_key_value} using PartiQL: {e}')
             raise
 
     # ===========================

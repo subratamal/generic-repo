@@ -1,6 +1,6 @@
 [project]
 name = "generic-repo"
-version = "2.0.3"
+version = "2.0.8"
 description = "A powerful, production-ready Python package for DynamoDB operations with repository pattern (sync and async)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -37,13 +37,7 @@ classifiers = [
     "Typing :: Typed",
     "Framework :: AsyncIO",
 ]
-dependencies = [
-    "boto3>=1.26.0",
-    "botocore>=1.29.0",
-    "aiobotocore>=2.5.0",
-    "aioboto3>=11.0.0",
-    "types-aiobotocore[dynamodb]>=2.5.0",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [

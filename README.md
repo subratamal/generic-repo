@@ -7,6 +7,7 @@ A powerful, production-ready Python package for DynamoDB operations with reposit
 - **Dual Interface**: Both sync and async implementations with identical APIs
 - **Repository Pattern**: Clean, standardized interface for DynamoDB operations
 - **Comprehensive Operations**: CRUD, batch operations, queries, and index-based searches
+- **Conditional Updates**: Server-side atomic conditional updates with simple dict syntax
 - **Advanced Filtering**: Powerful client-side filtering with multiple operators and conditions
 - **Auto-Serialization**: Automatic data type conversion for DynamoDB compatibility
 - **Expiration Support**: Built-in TTL handling for automatic data expiration
@@ -103,6 +104,241 @@ Both `GenericRepository` and `AsyncGenericRepository` provide identical APIs:
 - `save_with_composite_key(item_data)` / `await save_with_composite_key(item_data)`
 - `delete_by_composite_key(key_dict)` / `await delete_by_composite_key(key_dict)`
 
+### Conditional Updates
+- `update(key, data, conditions=...)` / `await update(key, data, conditions=...)`
+- `update_by_composite_key(key_dict, data, conditions=...)` / `await update_by_composite_key(key_dict, data, conditions=...)`
+
+## Conditional Updates
+
+Perform atomic, server-side conditional updates using DynamoDB's native `ConditionExpression`. Updates only succeed if the specified conditions are met.
+
+### Simple Dictionary Syntax
+
+The easiest way to add conditions is using simple dictionaries:
+
+```python
+from generic_repo import GenericRepository
+
+repo = GenericRepository(
+    table_name='users',
+    primary_key_name='id',
+    region_name='us-east-1'
+)
+
+# Only update if status is 'active'
+result = repo.update(
+    primary_key_value='user-123',
+    update_data={'balance': 100},
+    conditions={'status': 'active'},
+    rejection_message="User must be active"
+)
+
+if result.get('success') == False:
+    print(f"Update rejected: {result['message']}")
+else:
+    print(f"Update succeeded: {result}")
+```
+
+### Comparison Operators
+
+```python
+# Only update if version is less than 10
+repo.update(
+    primary_key_value='doc-456',
+    update_data={'content': 'New content'},
+    conditions={'version': {'lt': 10}}
+)
+
+# Only update if score is greater than or equal to 90
+repo.update(
+    primary_key_value='player-789',
+    update_data={'level': 5},
+    conditions={'score': {'gte': 90}}
+)
+
+# Only update if price is between 10 and 100
+repo.update(
+    primary_key_value='product-123',
+    update_data={'discount': 0.1},
+    conditions={'price': {'between': [10, 100]}}
+)
+```
+
+### Multiple Conditions (AND Logic)
+
+```python
+# Only update if BOTH conditions are met
+repo.update(
+    primary_key_value='order-999',
+    update_data={'shipped': True},
+    conditions={
+        'status': 'pending',
+        'payment_received': True
+    }
+)
+```
+
+### List Membership (IN Operator)
+
+```python
+# Only update if status is one of the allowed values
+repo.update(
+    primary_key_value='ticket-555',
+    update_data={'assigned_to': 'agent-1'},
+    conditions={'status': {'in': ['open', 'pending', 'in-progress']}}
+)
+```
+
+### Attribute Existence
+
+```python
+# Only update if email field exists
+repo.update(
+    primary_key_value='user-111',
+    update_data={'email_verified': True},
+    conditions={'email': {'exists': True}}
+)
+
+# Only update if deleted_at field does NOT exist
+repo.update(
+    primary_key_value='post-222',
+    update_data={'views': 100},
+    conditions={'deleted_at': {'not_exists': True}}
+)
+```
+
+### Optimistic Locking Pattern
+
+```python
+# Read current version
+item = repo.load('document-123')
+current_version = item['version']
+
+# Update only if version hasn't changed (prevents concurrent updates)
+result = repo.update(
+    primary_key_value='document-123',
+    update_data={
+        'content': 'Updated content',
+        'version': current_version + 1
+    },
+    conditions={'version': current_version},
+    rejection_message="Document was modified by another user"
+)
+
+if result.get('success') == False:
+    print("Conflict detected - reload and try again")
+```
+
+### Async Conditional Updates
+
+```python
+import asyncio
+from generic_repo import AsyncGenericRepository
+
+async def conditional_update_example():
+    async with AsyncGenericRepository(
+        table_name='orders',
+        primary_key_name='id',
+        region_name='us-east-1'
+    ) as repo:
+        # Async conditional update
+        result = await repo.update(
+            primary_key_value='order-789',
+            update_data={'status': 'shipped'},
+            conditions={'status': 'pending', 'payment_verified': True},
+            rejection_message="Order must be pending and payment verified"
+        )
+        
+        if result.get('success') == False:
+            print(f"Update rejected: {result['message']}")
+        else:
+            print("Order shipped successfully!")
+
+asyncio.run(conditional_update_example())
+```
+
+### Composite Key with Conditions
+
+```python
+# Update composite key item with conditions
+result = repo.update_by_composite_key(
+    key_dict={'user_id': 'user-123', 'order_id': 'order-456'},
+    update_data={'total': 150.00},
+    conditions={'status': 'draft'},
+    rejection_message="Can only modify draft orders"
+)
+```
+
+### Advanced: Using Attr() Directly
+
+For complex conditions not covered by the dict syntax, you can use boto3's `Attr()`:
+
+```python
+from boto3.dynamodb.conditions import Attr
+
+# Complex condition combining multiple operations
+result = repo.update(
+    primary_key_value='item-999',
+    update_data={'processed': True},
+    conditions=(
+        Attr('status').eq('pending') & 
+        (Attr('priority').gt(5) | Attr('urgent').eq(True))
+    )
+)
+```
+
+### Supported Condition Operators
+
+| Operator | Dict Syntax | Example |
+|----------|-------------|---------|
+| Equals | `{'field': 'value'}` | `{'status': 'active'}` |
+| Not Equals | `{'field': {'ne': value}}` | `{'status': {'ne': 'deleted'}}` |
+| Less Than | `{'field': {'lt': value}}` | `{'age': {'lt': 30}}` |
+| Less or Equal | `{'field': {'lte': value}}` | `{'score': {'lte': 100}}` |
+| Greater Than | `{'field': {'gt': value}}` | `{'price': {'gt': 0}}` |
+| Greater or Equal | `{'field': {'gte': value}}` | `{'quantity': {'gte': 10}}` |
+| Between | `{'field': {'between': [min, max]}}` | `{'age': {'between': [18, 65]}}` |
+| IN | `{'field': {'in': [values]}}` | `{'status': {'in': ['active', 'pending']}}` |
+| Contains | `{'field': {'contains': value}}` | `{'tags': {'contains': 'urgent'}}` |
+| Begins With | `{'field': {'begins_with': prefix}}` | `{'email': {'begins_with': 'admin'}}` |
+| Exists | `{'field': {'exists': True}}` | `{'phone': {'exists': True}}` |
+| Not Exists | `{'field': {'not_exists': True}}` | `{'deleted_at': {'not_exists': True}}` |
+
+### Error Handling
+
+```python
+from botocore.exceptions import ClientError
+
+try:
+    result = repo.update(
+        primary_key_value='item-123',
+        update_data={'value': 100},
+        conditions={'status': 'active'},
+        rejection_message="Item must be active"
+    )
+    
+    # Check for conditional check failure
+    if result.get('success') == False:
+        print(f"Condition not met: {result['message']}")
+        print(f"Reason: {result.get('reason', 'Unknown')}")
+    else:
+        print("Update successful!")
+        
+except ClientError as e:
+    if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+        print("DynamoDB condition check failed")
+    else:
+        print(f"Error: {e}")
+```
+
+### Benefits of Conditional Updates
+
+- **Atomic**: Server-side checks prevent race conditions
+- **Safe**: Prevents conflicting updates in concurrent scenarios
+- **Simple**: Dict-based syntax is easy to read and write
+- **Flexible**: Supports both simple dicts and complex Attr() conditions
+- **Efficient**: No extra read operations needed (unlike client-side checks)
+
 ## Best Practices
 
 ### For PyPI Package Users
@@ -157,6 +393,7 @@ See CHANGELOG.md for version history and changes.
 
 - **Simple & Composite Key Support**: Works with both simple primary key tables and composite key (partition + sort key) tables
 - **Comprehensive CRUD Operations**: Create, Read, Update, Delete operations with error handling
+- **Conditional Updates**: Atomic server-side conditional updates with simple dict-based syntax
 - **Batch Operations**: Efficient batch save and delete operations that automatically handle DynamoDB's 25-item limit
 - **Advanced Querying**: Query operations with automatic pagination support
 - **Powerful Filtering**: Client-side filtering with 12+ operators (eq, ne, gt, lt, contains, between, etc.)
@@ -566,6 +803,7 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 - [x] Async/await support for better performance
 - [x] Advanced filtering with multiple operators and conditions
+- [x] Conditional updates with atomic server-side checks
 - [ ] More advanced query builders
 - [ ] OR logic support for filters
 - [ ] Built-in caching layer

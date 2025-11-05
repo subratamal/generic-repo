@@ -17,6 +17,16 @@ Example:
     for item in repo.load_all(filters={'status': 'active', 'age': {'gt': 18}}):
         print(item)
 
+    # Conditional updates
+    result = repo.update(
+        primary_key_value='item-123',
+        update_data={'status': 'active'},
+        conditions={'approved': True},
+        rejection_message="Item must be approved first"
+    )
+    if result.get('success') == False:
+        print(f"Update rejected: {result['message']}")
+
     # Async usage with filtering
     async with AsyncGenericRepository(table_name='my-table', primary_key_name='id') as repo:
         async for item in repo.load_all(filters={'status': 'active'}):
