@@ -500,8 +500,6 @@ class GenericRepository:
         Raises:
             ClientError: If there's an error communicating with DynamoDB (except condition check failures)
         """
-        self.logger.info(f'updating composite key {key_dict} with update_data {update_data}')
-        
         if self.debug_mode:
             self.logger.info(f'Debug mode: skipping composite key update to {self.table_name} with key_dict {key_dict}')
             return None
@@ -541,7 +539,6 @@ class GenericRepository:
             response = self.table.update_item(**update_params)
             
             if return_model:
-                self.logger.info(f'returning response {response.get('Attributes')}')
                 return response.get('Attributes')
         except ClientError as e:
             # Handle condition check failure
